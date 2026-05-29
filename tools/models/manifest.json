@@ -1,0 +1,42 @@
+{
+  "_comment": "Pre-converted Core ML model artifacts adopted for v1 (U2). Sources are john-rocky/CoreML-Models (Google Drive). After download+validation, sha256 is recorded here and the files are re-hosted (U3) so the app never depends on Drive. drive_id is the Google Drive file id.",
+  "models": [
+    {
+      "name": "realesrgan-x4plus",
+      "drive_id": "16JEWh48fgQc8az7avROePOd-PYda0Yi2",
+      "filename": "RealESRGAN4x.mlmodel",
+      "expected_mb": 66.9,
+      "io": "Image(RGB) 512x512 -> 2048x2048 (x4)",
+      "license": "BSD-3-Clause",
+      "upstream": "https://github.com/xinntao/Real-ESRGAN",
+      "source": "https://github.com/john-rocky/CoreML-Models",
+      "pytorch_ref_weight": "realesrgan-x4plus",
+      "sha256": "6107dc417de87bf974e5b225a2632e2c78f2849265dc897981f482e922050ec9"
+    },
+    {
+      "name": "gfpgan-v1.4",
+      "drive_id": "1-3fF4aPnh8ygUOmKItIrZ318xI9JGmQx",
+      "filename": "GFPGAN.mlmodel",
+      "expected_mb": 337.4,
+      "io": "Image(RGB) 512x512 -> 512x512",
+      "license": "Apache-2.0",
+      "upstream": "https://github.com/TencentARC/GFPGAN",
+      "source": "https://github.com/john-rocky/CoreML-Models",
+      "pytorch_ref_weight": "gfpgan-v1.4",
+      "sha256": "218a39c226adecb2ccbc1e358023b80a5cf2510be85dfc3ab0da698fad51391a"
+    },
+    {
+      "name": "face-parsing",
+      "drive_id": "1I_cu8x0k6d1AEV_VPLyMu3Pqg3hwmo7g",
+      "filename": "FaceParsing.mlmodel",
+      "expected_mb": 53.2,
+      "io": "Image(RGB) 512x512 -> MultiArray(1 x 512 x 512) class map",
+      "license": "MIT",
+      "upstream": "https://github.com/zllrunning/face-parsing.PyTorch",
+      "source": "https://github.com/john-rocky/CoreML-Face-Parsing",
+      "pytorch_ref_weight": null,
+      "note": "Different model from facexlib's internal parsenet; provides a 19-class face mask for feathered paste-back. No direct PyTorch reference in photo-restore, so validated by sanity (shape + plausible mask), not parity.",
+      "sha256": "e7ebd6cc3f53486becc0dbf3b74027bc045aa4158402936ea09c3625682be6bb"
+    }
+  ]
+}
