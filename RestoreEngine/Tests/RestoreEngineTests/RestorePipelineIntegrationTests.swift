@@ -24,7 +24,7 @@ final class RestorePipelineIntegrationTests: XCTestCase {
         try XCTUnwrap(Bundle.module.url(forResource: n, withExtension: e, subdirectory: "Fixtures"))
     }
 
-    func testFullConservativePipelineOn77ish() async throws {
+    func testFullConservativePipelineOnSample() async throws {
         guard let esrgan = cache("RealESRGAN4x.mlmodel"),
               let gfpgan = cache("GFPGAN.mlmodel"),
               let parse = cache("FaceParsing.mlmodel") else {
@@ -35,7 +35,7 @@ final class RestorePipelineIntegrationTests: XCTestCase {
         let parser = try CoreMLFaceParser(compiledModelURL: try await MLModel.compileModel(at: parse))
         let pipeline = RestorePipeline(upscaler: upscaler, restorer: restorer, parser: parser)
 
-        let loaded = try ImageLoading.load(url: fixture("input_77ish", "jpeg"))
+        let loaded = try ImageLoading.load(url: fixture("input_sample", "jpg"))
         var stages: [RestorePipeline.Stage] = []
         let out = try pipeline.restore(loaded, config: RestoreConfig()) { event in
             if case .stageStarted(let s) = event { stages.append(s) }
@@ -52,16 +52,16 @@ final class RestorePipelineIntegrationTests: XCTestCase {
 
         // Quality/regression guard vs the Python CLI's conservative output (different GFPGAN
         // build, so a loose gate — full-image SSIM is dominated by the matching background).
-        let ref = try ImageLoading.load(url: fixture("output_77ish", "jpeg")).image
+        let ref = try ImageLoading.load(url: fixture("output_sample", "jpg")).image
         if out.width == ref.width && out.height == ref.height {
             let s = Metrics.ssim(out, ref)
-            print("pipeline parity [77ish, conservative]: full-image SSIM=\(String(format: "%.3f", s)) vs Python CLI")
+            print("pipeline parity [sample, conservative]: full-image SSIM=\(String(format: "%.3f", s)) vs Python CLI")
             XCTAssertGreaterThanOrEqual(s, 0.80, "full-image restoration diverges too far from the CLI reference")
         }
 
         // Dump for visual confirmation.
         if let cg = out.makeCGImage() {
-            let dest = URL(fileURLWithPath: "/tmp/pipeline_77ish_swift.png")
+            let dest = URL(fileURLWithPath: "/tmp/pipeline_sample_swift.png")
             if let dst = CGImageDestinationCreateWithURL(dest as CFURL, "public.png" as CFString, 1, nil) {
                 CGImageDestinationAddImage(dst, cg, nil); CGImageDestinationFinalize(dst)
             }

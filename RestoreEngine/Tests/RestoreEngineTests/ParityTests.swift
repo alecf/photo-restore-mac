@@ -17,9 +17,9 @@ final class ParityTests: XCTestCase {
     }
 
     func testContrastMatchesReference() throws {
-        let input = try ImageLoading.load(url: fixture("input_77ish", "jpeg")).image
+        let input = try ImageLoading.load(url: fixture("input_sample", "jpg")).image
         let swiftOut = Contrast.normalize(input)
-        let reference = try ImageLoading.load(url: fixture("contrast_77ish", "png")).image
+        let reference = try ImageLoading.load(url: fixture("contrast_sample", "png")).image
 
         XCTAssertEqual(swiftOut.width, reference.width)
         XCTAssertEqual(swiftOut.height, reference.height)
@@ -31,11 +31,11 @@ final class ParityTests: XCTestCase {
     }
 
     func testResizeMatchesReference() throws {
-        let input = try ImageLoading.load(url: fixture("input_77ish", "jpeg")).image
+        let input = try ImageLoading.load(url: fixture("input_sample", "jpg")).image
         let target = try Resolution.parseSize("400x")
         let (tw, th) = try Resolution.resolveDimensions(target, origW: input.width, origH: input.height)
         let swiftOut = Lanczos.resize(input, toWidth: tw, toHeight: th)
-        let reference = try ImageLoading.load(url: fixture("resize_77ish", "png")).image
+        let reference = try ImageLoading.load(url: fixture("resize_sample", "png")).image
 
         XCTAssertEqual(swiftOut.width, reference.width, "target width mismatch")
         XCTAssertEqual(swiftOut.height, reference.height, "target height mismatch")

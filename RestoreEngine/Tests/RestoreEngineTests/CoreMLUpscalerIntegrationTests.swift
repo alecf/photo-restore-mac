@@ -29,7 +29,7 @@ final class CoreMLUpscalerIntegrationTests: XCTestCase {
             return try ImageLoading.load(url: u2crop).image
         }
         let input = try ImageLoading.load(url: XCTUnwrap(
-            Bundle.module.url(forResource: "input_77ish", withExtension: "jpeg", subdirectory: "Fixtures"))).image
+            Bundle.module.url(forResource: "input_sample", withExtension: "jpg", subdirectory: "Fixtures"))).image
         let side = 512
         let x = max(0, (input.width - side) / 2), y = max(0, (input.height - side) / 2)
         let resized = (input.width < side || input.height < side)
