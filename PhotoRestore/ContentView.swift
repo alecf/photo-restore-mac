@@ -2,136 +2,133 @@ import SwiftUI
 import UniformTypeIdentifiers
 import RestoreEngine
 
-/// Root view. For now it establishes the welcome → work-area skeleton: an empty drop zone
-/// that accepts a file or folder, expands the dropped set into decodable images, and lists
-/// them. The before/after viewer, filmstrip, live preview, and settings (U8) build on this.
 struct ContentView: View {
-    @State private var droppedImages: [URL] = []
+    @StateObject private var model = AppModel()
     @State private var isTargeted = false
-    @State private var showImporter = false
 
     var body: some View {
         Group {
-            if droppedImages.isEmpty {
-                welcome
+            if !model.modelsReady {
+                SetupView(model: model)
+            } else if model.items.isEmpty {
+                EmptyDropView(model: model, isTargeted: isTargeted)
             } else {
-                workArea
+                MainView(model: model)
             }
         }
+        .frame(minWidth: 860, minHeight: 580)
         .dropDestination(for: URL.self) { urls, _ in
-            ingest(urls)
+            guard model.modelsReady else { return false }
+            model.add(urls: urls)
             return true
         } isTargeted: { isTargeted = $0 }
-        .fileImporter(
-            isPresented: $showImporter,
-            allowedContentTypes: [.image, .folder],
-            allowsMultipleSelection: true
-        ) { result in
-            if case .success(let urls) = result { ingest(urls) }
+    }
+}
+
+/// Shown until the Core ML models are installed. Offers local side-load (used until the hosted
+/// download is wired); the registry's SHA-256s guard integrity.
+struct SetupView: View {
+    @ObservedObject var model: AppModel
+    @State private var importing = false
+
+    var body: some View {
+        VStack(spacing: 18) {
+            Image(systemName: "wand.and.stars")
+                .font(.system(size: 56, weight: .thin)).foregroundStyle(.secondary)
+            Text("One-time setup").font(.title2.weight(.semibold))
+            Text("Photo Restore needs its restoration models (~460 MB).")
+                .foregroundStyle(.secondary)
+            if model.isPreparing {
+                ProgressView().controlSize(.small)
+                Text(model.setupMessage ?? "Installing…").font(.callout).foregroundStyle(.secondary)
+            } else {
+                Button("Install from Folder…") { pickFolder() }
+                    .controlSize(.large)
+                if let msg = model.setupMessage {
+                    Text(msg).font(.callout).foregroundStyle(.red).multilineTextAlignment(.center)
+                        .frame(maxWidth: 420)
+                }
+                Text("Choose a folder containing RealESRGAN4x.mlmodel, GFPGAN.mlmodel and FaceParsing.mlmodel.")
+                    .font(.caption).foregroundStyle(.tertiary).multilineTextAlignment(.center).frame(maxWidth: 420)
+            }
         }
-        .animation(.easeInOut(duration: 0.2), value: droppedImages.isEmpty)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(40)
     }
 
-    // MARK: - States
+    private func pickFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.prompt = "Install Models"
+        if panel.runModal() == .OK, let url = panel.url {
+            Task { await model.importModels(from: url) }
+        }
+    }
+}
 
-    private var welcome: some View {
+/// Welcome / drop target before any photos are added.
+struct EmptyDropView: View {
+    @ObservedObject var model: AppModel
+    let isTargeted: Bool
+
+    var body: some View {
         VStack(spacing: 20) {
             Image(systemName: "photo.on.rectangle.angled")
                 .font(.system(size: 64, weight: .thin))
-                .foregroundStyle(.secondary)
-            Text("Drag a photo or folder here")
-                .font(.title2.weight(.medium))
+                .foregroundStyle(isTargeted ? Color.accentColor : .secondary)
+            Text("Drag a photo or folder here").font(.title2.weight(.medium))
             Text("Old scans, faded prints, low-res photos — dropped in, restored out.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-            Button("Choose Photos…") { showImporter = true }
-                .controlSize(.large)
-                .padding(.top, 4)
+                .font(.callout).foregroundStyle(.secondary)
+            Button("Choose Photos…") { pick() }.controlSize(.large)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(dropBackdrop)
-        .contentShape(Rectangle())
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(isTargeted ? Color.accentColor : Color.secondary.opacity(0.3),
+                              style: StrokeStyle(lineWidth: 2, dash: [8, 6]))
+                .padding(24)
+        )
     }
 
-    private var workArea: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text("\(droppedImages.count) image\(droppedImages.count == 1 ? "" : "s") ready")
-                    .font(.headline)
-                Spacer()
-                Button("Add More…") { showImporter = true }
-                Button("Clear") { droppedImages = [] }
-            }
-            .padding()
-
-            // Placeholder filmstrip — replaced by the real before/after viewer + tray in U8.
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 4) {
-                    ForEach(droppedImages, id: \.self) { url in
-                        Label(url.lastPathComponent, systemImage: "photo")
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                            .padding(.horizontal)
-                    }
-                }
-                .padding(.vertical, 8)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(isTargeted ? Color.accentColor.opacity(0.08) : Color.clear)
-    }
-
-    private var dropBackdrop: some View {
-        RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .strokeBorder(
-                isTargeted ? Color.accentColor : Color.secondary.opacity(0.35),
-                style: StrokeStyle(lineWidth: 2, dash: [8, 6])
-            )
-            .background(isTargeted ? Color.accentColor.opacity(0.08) : Color.clear)
-            .padding(24)
-    }
-
-    // MARK: - Ingest
-
-    /// Expand dropped URLs (files and folders) into the set of images the engine can decode,
-    /// recursing folders. Dedup by canonical path; preserves a stable sorted order.
-    private func ingest(_ urls: [URL]) {
-        var found: [URL] = []
-        for url in urls {
-            if isDirectory(url) {
-                found.append(contentsOf: imageFiles(in: url))
-            } else if ImageLoading.canDecode(url: url) {
-                found.append(url)
-            }
-        }
-        var seen = Set(droppedImages.map(\.standardizedFileURL))
-        for url in found.sorted(by: { $0.path < $1.path }) {
-            let key = url.standardizedFileURL
-            if seen.insert(key).inserted {
-                droppedImages.append(url)
-            }
-        }
-    }
-
-    private func isDirectory(_ url: URL) -> Bool {
-        (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
-    }
-
-    private func imageFiles(in folder: URL) -> [URL] {
-        guard let en = FileManager.default.enumerator(
-            at: folder,
-            includingPropertiesForKeys: [.isRegularFileKey],
-            options: [.skipsHiddenFiles]
-        ) else { return [] }
-        var out: [URL] = []
-        for case let url as URL in en where ImageLoading.canDecode(url: url) {
-            out.append(url)
-        }
-        return out
+    private func pick() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = true
+        panel.allowedContentTypes = [.image, .folder]
+        if panel.runModal() == .OK { model.add(urls: panel.urls) }
     }
 }
 
-#Preview {
-    ContentView()
-        .frame(width: 720, height: 520)
+extension BatchItemStatus {
+    var symbol: String {
+        switch self {
+        case .queued: return "clock"
+        case .processing: return "arrow.triangle.2.circlepath"
+        case .done: return "checkmark.circle.fill"
+        case .skipped: return "minus.circle.fill"
+        case .failed: return "exclamationmark.triangle.fill"
+        }
+    }
+    var tint: Color {
+        switch self {
+        case .queued: return .secondary
+        case .processing: return .blue
+        case .done: return .green
+        case .skipped: return .orange
+        case .failed: return .red
+        }
+    }
+    var label: String {
+        switch self {
+        case .queued: return "Queued"
+        case .processing: return "Restoring…"
+        case .done: return "Done"
+        case .skipped(let r): return "Skipped — \(r)"
+        case .failed(let r): return "Failed — \(r)"
+        }
+    }
 }
+
+#Preview { ContentView() }

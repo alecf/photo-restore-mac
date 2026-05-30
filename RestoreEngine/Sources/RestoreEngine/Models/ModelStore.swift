@@ -65,18 +65,48 @@ public actor ModelStore {
         let raw = try await download(spec, onProgress: onProgress)
         try verify(raw, spec: spec)
 
-        let compiled: URL
-        do {
-            compiled = try await MLModel.compileModel(at: raw)
-        } catch {
-            throw ModelError.compileFailed(model: spec.name, underlying: "\(error)")
-        }
+        let compiled = try await compile(raw, spec: spec)
+        try install(compiled, to: target)
+        try? fileManager.removeItem(at: raw)   // compiled artifact is what we load; reclaim space
+        return target
+    }
 
+    /// Install models from a local directory (offline side-load / development), compiling +
+    /// caching any not present yet. The directory must contain files named per each
+    /// `ModelSpec.fileName`; each is SHA-256-verified before compiling. Missing files are
+    /// skipped. Returns the names of models that are now ready.
+    @discardableResult
+    public func importLocalModels(from directory: URL) async throws -> [String] {
+        var ready: [String] = []
+        for spec in ModelRegistry.all {
+            let target = compiledURL(for: spec)
+            if fileManager.fileExists(atPath: target.path) { ready.append(spec.name); continue }
+            let src = directory.appendingPathComponent(spec.fileName)
+            guard fileManager.fileExists(atPath: src.path) else { continue }
+            try verify(src, spec: spec)
+            let compiled = try await compile(src, spec: spec)
+            try install(compiled, to: target)
+            ready.append(spec.name)
+        }
+        return ready
+    }
+
+    /// Compiled `.mlmodelc` URLs for all models (call only when `isReady()`).
+    public func compiledURLs() -> (esrgan: URL, gfpgan: URL, parse: URL) {
+        (compiledURL(for: ModelRegistry.realESRGAN),
+         compiledURL(for: ModelRegistry.gfpgan),
+         compiledURL(for: ModelRegistry.faceParsing))
+    }
+
+    private func compile(_ raw: URL, spec: ModelSpec) async throws -> URL {
+        do { return try await MLModel.compileModel(at: raw) }
+        catch { throw ModelError.compileFailed(model: spec.name, underlying: "\(error)") }
+    }
+
+    private func install(_ compiled: URL, to target: URL) throws {
         try fileManager.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
         try? fileManager.removeItem(at: target)
         try fileManager.moveItem(at: compiled, to: target)
-        try? fileManager.removeItem(at: raw)   // compiled artifact is what we load; reclaim space
-        return target
     }
 
     /// Ensure all registered models are present, reporting overall progress weighted by size.
