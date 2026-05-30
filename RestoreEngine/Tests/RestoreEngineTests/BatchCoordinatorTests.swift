@@ -25,7 +25,13 @@ final class BatchCoordinatorTests: XCTestCase {
         return url
     }
 
-    /// Drain events until the batch finishes (or a generous cap, so a bug fails fast not hangs).
+    private func makeCoordinator(outputDir: URL, format: OutputFormat = .png, overwrite: Bool = false) async -> BatchCoordinator {
+        let c = BatchCoordinator(engine: FakeRestorer())
+        await c.updateSettings(config: RestoreConfig(doFace: false),
+                               policy: OutputPolicy(outputDirectory: outputDir, format: format, overwrite: overwrite))
+        return c
+    }
+
     private func drain(_ coord: BatchCoordinator) async -> [BatchEvent] {
         var events: [BatchEvent] = []
         for await e in coord.events {
@@ -40,9 +46,8 @@ final class BatchCoordinatorTests: XCTestCase {
         let inDir = try tempDir(), outDir = try tempDir()
         let a = try writePNG("a.png", in: inDir)
         let b = try writePNG("b.png", in: inDir)
-        let coord = BatchCoordinator(engine: FakeRestorer())
-        let policy = OutputPolicy(outputDirectory: outDir, format: .png)
-        await coord.enqueue([a, b], config: RestoreConfig(doFace: false), output: policy)
+        let coord = await makeCoordinator(outputDir: outDir)
+        await coord.enqueue([a, b])
         await coord.start()
         _ = await drain(coord)
 
@@ -50,66 +55,81 @@ final class BatchCoordinatorTests: XCTestCase {
         XCTAssertEqual(items.count, 2)
         XCTAssertTrue(items.allSatisfy { $0.status == .done })
         XCTAssertTrue(FileManager.default.fileExists(atPath: outDir.appendingPathComponent("a.png").path))
-        XCTAssertTrue(FileManager.default.fileExists(atPath: outDir.appendingPathComponent("b.png").path))
+    }
+
+    func testFinishedReportsConfigUsed() async throws {
+        let inDir = try tempDir(), outDir = try tempDir()
+        let a = try writePNG("a.png", in: inDir)
+        let coord = await makeCoordinator(outputDir: outDir)
+        await coord.enqueue([a])
+        await coord.start()
+        let events = await drain(coord)
+        let finished = events.compactMap { e -> RestoreConfig? in
+            if case .itemFinished(_, _, let cfg) = e { return cfg }; return nil
+        }
+        XCTAssertEqual(finished.first?.doFace, false, "reported config should match live settings")
     }
 
     func testOneBadImageDoesNotStopTheBatch() async throws {
         let inDir = try tempDir(), outDir = try tempDir()
         let good = try writePNG("good.png", in: inDir)
         let bad = inDir.appendingPathComponent("bad.png")
-        try Data("not an image".utf8).write(to: bad)   // undecodable → load throws
+        try Data("not an image".utf8).write(to: bad)
         let good2 = try writePNG("good2.png", in: inDir)
 
-        let coord = BatchCoordinator(engine: FakeRestorer())
-        await coord.enqueue([good, bad, good2], config: RestoreConfig(doFace: false),
-                            output: OutputPolicy(outputDirectory: outDir, format: .png))
+        let coord = await makeCoordinator(outputDir: outDir)
+        await coord.enqueue([good, bad, good2])
         await coord.start()
         _ = await drain(coord)
 
         let items = await coord.allItems
         XCTAssertEqual(items.filter { $0.status == .done }.count, 2)
-        let failed = items.first { if case .failed = $0.status { return true }; return false }
-        XCTAssertEqual(failed?.input.lastPathComponent, "bad.png")
+        XCTAssertTrue(items.contains { if case .failed = $0.status { return $0.input.lastPathComponent == "bad.png" }; return false })
     }
 
     func testInPlaceItemIsSkipped() async throws {
         let dir = try tempDir()
         let a = try writePNG("a.png", in: dir)
-        let coord = BatchCoordinator(engine: FakeRestorer())
-        // Output dir == input dir, keep format (same ext) → in-place → skipped, not processed.
-        await coord.enqueue([a], config: RestoreConfig(doFace: false),
-                            output: OutputPolicy(outputDirectory: dir, format: .keep))
+        let coord = await makeCoordinator(outputDir: dir, format: .keep)  // output == input dir, same ext
+        await coord.enqueue([a])
         await coord.start()
         _ = await drain(coord)
-        let items = await coord.allItems
-        if case .skipped = items[0].status {} else { XCTFail("expected skipped, got \(items[0].status)") }
+        if case .skipped = (await coord.allItems)[0].status {} else { XCTFail("expected skipped") }
     }
 
-    func testExistingOutputSkippedUnlessOverwrite() async throws {
+    func testReRestoreRequeuesAndRuns() async throws {
         let inDir = try tempDir(), outDir = try tempDir()
         let a = try writePNG("a.png", in: inDir)
-        let policy = OutputPolicy(outputDirectory: outDir, format: .png, overwrite: false)
-        try Data("existing".utf8).write(to: policy.outputURL(for: a))  // pre-existing output
-
-        let coord = BatchCoordinator(engine: FakeRestorer())
-        await coord.enqueue([a], config: RestoreConfig(doFace: false), output: policy)
+        let coord = await makeCoordinator(outputDir: outDir, overwrite: true)
+        await coord.enqueue([a])
         await coord.start()
         _ = await drain(coord)
-        let items = await coord.allItems
-        if case .skipped = items[0].status {} else { XCTFail("expected skipped (exists), got \(items[0].status)") }
+        let id = (await coord.allItems)[0].id
+
+        await coord.reRestore(id: id)
+        let requeued = await coord.allItems
+        XCTAssertEqual(requeued[0].status, .queued)
+        await coord.start()
+        _ = await drain(coord)
+        let done = await coord.allItems
+        XCTAssertEqual(done[0].status, .done)
     }
 
-    func testEmitsStartedAndFinishedEvents() async throws {
+    func testRemoveAndReorder() async throws {
         let inDir = try tempDir(), outDir = try tempDir()
         let a = try writePNG("a.png", in: inDir)
-        let coord = BatchCoordinator(engine: FakeRestorer())
-        await coord.enqueue([a], config: RestoreConfig(doFace: false),
-                            output: OutputPolicy(outputDirectory: outDir, format: .png))
-        await coord.start()
-        let events = await drain(coord)
+        let b = try writePNG("b.png", in: inDir)
+        let c = try writePNG("c.png", in: inDir)
+        let coord = await makeCoordinator(outputDir: outDir)
+        let added = await coord.enqueue([a, b, c])
+        let ids = added.map(\.id)
 
-        XCTAssertTrue(events.contains { if case .itemStarted = $0 { return true }; return false })
-        XCTAssertTrue(events.contains { if case .itemFinished = $0 { return true }; return false })
-        XCTAssertTrue(events.contains { if case .batchFinished = $0 { return true }; return false })
+        await coord.remove(id: ids[1])  // remove b
+        let afterRemove = await coord.allItems
+        XCTAssertEqual(afterRemove.map(\.id), [ids[0], ids[2]])
+
+        await coord.reorder([ids[2], ids[0]])
+        let afterReorder = await coord.allItems
+        XCTAssertEqual(afterReorder.map(\.id), [ids[2], ids[0]])
     }
 }

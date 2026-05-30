@@ -1,16 +1,14 @@
 import SwiftUI
 import RestoreEngine
 
-/// The working layout once photos are queued: a window toolbar (so controls sit in the
-/// title-bar area, not under it), a before/after viewer for the selected image, and a
-/// filmstrip of all queued images.
+/// The working layout once photos are queued: toolbar, before/after viewer for the selected
+/// image, a filmstrip of all queued images, and an always-available settings inspector (the
+/// modern macOS "drawer") that applies to whatever restores next.
 struct MainView: View {
     @ObservedObject var model: AppModel
-    @State private var showSettings = false
+    @State private var showSettings = true
 
-    private var selected: UIItem? {
-        model.items.first { $0.id == model.selectedID } ?? model.items.first
-    }
+    private var selected: UIItem? { model.selectedItem }
 
     private var hasQueued: Bool {
         model.items.contains { if case .queued = $0.status { return true }; return false }
@@ -21,7 +19,7 @@ struct MainView: View {
             viewer
             Divider()
             FilmstripView(model: model)
-                .frame(height: 124)
+                .frame(height: 132)
         }
         .toolbar {
             ToolbarItem(placement: .navigation) {
@@ -48,12 +46,15 @@ struct MainView: View {
                 .keyboardShortcut(.space, modifiers: [])
                 .disabled(!hasQueued && !model.isRunning)
 
-                Button { showSettings = true } label: { Image(systemName: "slider.horizontal.3") }
+                Button { showSettings.toggle() } label: { Image(systemName: "slider.horizontal.3") }
                     .help("Settings")
             }
         }
+        .inspector(isPresented: $showSettings) {
+            SettingsView(model: model)
+                .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
+        }
         .navigationTitle("Photo Restore")
-        .sheet(isPresented: $showSettings) { SettingsView(model: model) }
     }
 
     private var outputLabel: String {
@@ -66,7 +67,8 @@ struct MainView: View {
             BeforeAfterView(
                 before: model.beforeImage(for: item),
                 after: item.afterPreview,
-                status: item.status
+                status: item.status,
+                divergences: model.divergences(for: item.appliedConfig)
             )
             .id(item.id)
             .frame(maxWidth: .infinity, maxHeight: .infinity)

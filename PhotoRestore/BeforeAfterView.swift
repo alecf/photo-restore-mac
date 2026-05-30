@@ -8,38 +8,64 @@ struct BeforeAfterView: View {
     let before: NSImage?
     let after: NSImage?
     let status: BatchItemStatus
+    var divergences: [String] = []
 
     @State private var fraction: CGFloat = 0.5
 
     var body: some View {
-        GeometryReader { geo in
-            let w = geo.size.width
-            ZStack {
-                if let after {
-                    fit(after)
-                    if let before {
-                        fit(before)
-                            .mask(alignment: .leading) {
-                                Rectangle().frame(width: max(0, w * fraction))
-                            }
-                        handle(in: geo.size)
-                        labels
+        VStack(spacing: 0) {
+            GeometryReader { geo in
+                let w = geo.size.width
+                ZStack {
+                    if let after {
+                        fit(after)
+                        if let before {
+                            fit(before)
+                                .mask(alignment: .leading) {
+                                    Rectangle().frame(width: max(0, w * fraction))
+                                }
+                            handle(in: geo.size)
+                            labels
+                        }
+                    } else if let before {
+                        fit(before).opacity(0.6)
+                        statusOverlay
+                    } else {
+                        ProgressView()
                     }
-                } else if let before {
-                    fit(before).opacity(0.6)
-                    statusOverlay
-                } else {
-                    ProgressView()
                 }
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 0).onChanged { v in
+                        fraction = min(1, max(0, v.location.x / w))
+                    }
+                )
             }
-            .contentShape(Rectangle())
-            .gesture(
-                DragGesture(minimumDistance: 0).onChanged { v in
-                    fraction = min(1, max(0, v.location.x / w))
-                }
-            )
+            settingsBar
         }
         .padding(16)
+    }
+
+    /// Shows which settings were active for this result — only the divergences from defaults.
+    @ViewBuilder private var settingsBar: some View {
+        if case .done = status {
+            HStack(spacing: 6) {
+                if divergences.isEmpty {
+                    Label("Default settings", systemImage: "checkmark.seal")
+                        .font(.caption).foregroundStyle(.secondary)
+                } else {
+                    Image(systemName: "slider.horizontal.3").font(.caption2).foregroundStyle(.secondary)
+                    ForEach(divergences, id: \.self) { chip in
+                        Text(chip)
+                            .font(.caption2)
+                            .padding(.horizontal, 7).padding(.vertical, 3)
+                            .background(.quaternary, in: Capsule())
+                    }
+                }
+                Spacer()
+            }
+            .padding(.top, 10)
+        }
     }
 
     private func fit(_ image: NSImage) -> some View {

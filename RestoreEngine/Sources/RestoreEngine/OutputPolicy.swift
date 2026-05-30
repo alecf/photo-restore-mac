@@ -18,7 +18,7 @@ public enum OutputError: Error, CustomStringConvertible {
 /// Resolves where each restored image is written and enforces the data-safety rules surfaced
 /// during planning: never overwrite an original in place, skip already-restored files unless
 /// asked, and mirror a dropped folder's structure. Pure + deterministic so it's fully tested.
-public struct OutputPolicy: Sendable {
+public struct OutputPolicy: Sendable, Equatable {
     public var outputDirectory: URL
     public var format: OutputFormat
     public var overwrite: Bool

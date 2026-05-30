@@ -51,3 +51,35 @@ public struct RestoreConfig: Sendable, Equatable {
         self.device = device
     }
 }
+
+extension RestoreConfig {
+    /// Human-readable settings that differ from the defaults — for showing "what was used"
+    /// compactly (only the divergences, never a full dump). Empty == all defaults.
+    public func divergences(from defaults: RestoreConfig = RestoreConfig()) -> [String] {
+        var out: [String] = []
+        if target != defaults.target { out.append("Size: \(RestoreConfig.describe(target))") }
+        if doFace != defaults.doFace { out.append(doFace ? "Faces on" : "Faces off") }
+        if doFace {
+            if faceBlend != defaults.faceBlend { out.append("Intensity \(Int((faceBlend * 100).rounded()))%") }
+            if matchFaceColor != defaults.matchFaceColor { out.append(matchFaceColor ? "Color-match on" : "Color-match off") }
+            if faceGrain != defaults.faceGrain { out.append(faceGrain ? "Grain on" : "Grain off") }
+            if faceRestoreThreshold != defaults.faceRestoreThreshold {
+                out.append(faceRestoreThreshold <= 0 ? "Restore all faces" : "Skip faces > \(faceRestoreThreshold)px")
+            }
+        }
+        if doContrast != defaults.doContrast { out.append(doContrast ? "Auto-contrast on" : "Auto-contrast off") }
+        if device != defaults.device { out.append("Device: \(device.rawValue)") }
+        return out
+    }
+
+    static func describe(_ target: Resolution.Target) -> String {
+        switch target {
+        case .same: return "Keep original"
+        case .scale(let f):
+            let s = f == f.rounded() ? String(Int(f)) : String(f)
+            return "\(s)×"
+        case .size(let w, let h):
+            return "≤ \(w.map(String.init) ?? "")×\(h.map(String.init) ?? "")"
+        }
+    }
+}

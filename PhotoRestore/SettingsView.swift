@@ -1,11 +1,11 @@
 import SwiftUI
 import RestoreEngine
 
-/// Mac-native settings — not a CLI-flag dump. Size + a single restoration-intensity slider up
-/// top; everything else under Advanced. Changes apply to newly-added photos.
+/// Mac-native settings inspector — not a CLI-flag dump. Size + a single restoration-intensity
+/// slider up top; everything else under Advanced. Always visible; changes apply live to whatever
+/// restores next (and enable per-photo "redo" when they diverge from a photo's last result).
 struct SettingsView: View {
     @ObservedObject var model: AppModel
-    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(spacing: 0) {
@@ -63,14 +63,6 @@ struct SettingsView: View {
                 }
             }
             .formStyle(.grouped)
-
-            Divider()
-            HStack {
-                Spacer()
-                Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
-            }
-            .padding(12)
         }
-        .frame(width: 460, height: 520)
     }
 }

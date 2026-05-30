@@ -23,18 +23,19 @@ public struct BatchItem: Sendable, Identifiable, Equatable {
     public let input: URL
     public var output: URL
     public var status: BatchItemStatus
-    public let config: RestoreConfig
 
-    public init(id: UUID = UUID(), input: URL, output: URL, status: BatchItemStatus = .queued, config: RestoreConfig) {
-        self.id = id; self.input = input; self.output = output; self.status = status; self.config = config
+    public init(id: UUID = UUID(), input: URL, output: URL, status: BatchItemStatus = .queued) {
+        self.id = id; self.input = input; self.output = output; self.status = status
     }
 }
 
 /// Events streamed as a batch runs. Preview images are full-size; the UI downsamples + throttles.
+/// `itemFinished` reports the exact `RestoreConfig` the image was restored with, so the UI can
+/// show which settings were active and decide whether a re-restore would change anything.
 public enum BatchEvent: Sendable {
     case itemStarted(id: UUID)
     case itemPreview(id: UUID, stage: RestorePipeline.Stage, image: RGBImage)
-    case itemFinished(id: UUID, output: URL)
+    case itemFinished(id: UUID, output: URL, config: RestoreConfig)
     case itemFailed(id: UUID, reason: String)
     case itemSkipped(id: UUID, reason: String)
     case batchProgress(completed: Int, total: Int)
