@@ -2,6 +2,8 @@ import SwiftUI
 
 @main
 struct PhotoRestoreApp: App {
+    @StateObject private var updater = UpdaterController()
+
     var body: some Scene {
         WindowGroup {
             ContentView()
@@ -9,5 +11,10 @@ struct PhotoRestoreApp: App {
         }
         .windowResizability(.contentMinSize)
         .windowToolbarStyle(.unified)
+        .commands {
+            CommandGroup(after: .appInfo) {
+                CheckForUpdatesCommand(controller: updater)
+            }
+        }
     }
 }

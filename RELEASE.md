@@ -1,41 +1,38 @@
-# Releasing Photo Restore (notarized .dmg)
+# Releasing Photo Restore
 
-The app is distributed **outside the Mac App Store** as a Developer-ID-signed, notarized, stapled
-`.dmg`. It is intentionally **not sandboxed** (a folder-batch tool fights the sandbox), so it needs
-no entitlements file — just Hardened Runtime (set via `ENABLE_HARDENED_RUNTIME` in `project.yml`)
-and a Developer ID signature.
+Releases are automated via GitHub Actions, modeled on the memwatch flow. The app is
+**ad-hoc signed** (no paid Apple Developer account) and auto-updates via **Sparkle**.
 
-## One-time prerequisites (your Apple Developer account)
+## How a release works
 
-These are the only things the build can't supply itself:
+1. Land changes on `main` via PRs. PR titles must be conventional commits (`feat:`, `fix:`, …) —
+   enforced by `.github/workflows/pr-title.yml`, and the basis for versioning. CI
+   (`.github/workflows/ci.yml`) builds the app + runs the engine tests on every PR.
+2. Run the release: **`gh workflow run release.yml`** (or the Actions tab → Release → Run).
+   `.github/workflows/release.yml` then:
+   - uses **git-cliff** to compute the next semver + changelog from the commits since the last tag,
+   - builds the Release app (xcodebuild) and **ad-hoc signs** it (incl. the Sparkle framework),
+   - packages a `PhotoRestore-<version>-arm64.dmg`,
+   - signs the DMG with the **Sparkle EdDSA** key (`SPARKLE_PRIVATE_KEY` secret),
+   - tags `v<version>`, creates the **GitHub Release** with the DMG + changelog,
+   - prepends the release to `site/appcast.xml` and pushes it, which triggers
+     `deploy-pages.yml` to publish the appcast so installed apps see the update.
 
-1. **Developer ID Application certificate** installed in your login keychain
-   (Xcode → Settings → Accounts → Manage Certificates → +).
-2. A **notarytool keychain profile** with an app-specific password:
-   ```sh
-   xcrun notarytool store-credentials photorestore \
-     --apple-id "you@example.com" --team-id "YOURTEAMID" --password "app-specific-password"
-   ```
-3. Your **Team ID** (10 chars, from developer.apple.com → Membership).
+## One-time setup (required before the first release)
 
-## Cut a release
+See **`docs/sparkle-setup.md`** — generate the Sparkle key pair, pin the public key in
+`project.yml` (`SUPublicEDKey`), set the `SPARKLE_PRIVATE_KEY` repo secret, and enable GitHub
+Pages (Source: GitHub Actions). The release workflow refuses to run until the secret is set.
 
-```sh
-TEAM_ID=YOURTEAMID NOTARY_PROFILE=photorestore scripts/release.sh
-# → build/PhotoRestore.dmg  (signed, notarized, stapled)
-```
+## Local builds (no CI)
 
-The script archives Release, exports a Developer-ID app, submits to notarytool (`--wait`), staples
-the ticket (so it launches offline on a clean Mac), and packages a `.dmg`.
+- `scripts/run.sh` — build + launch (dev loop).
+- `scripts/dmg-local.sh` — ad-hoc `.dmg` for local testing.
+- `scripts/release.sh` + `RELEASE` notes for a **Developer-ID notarized** DMG — only if you later
+  get a paid Apple Developer account and want notarization (better first-launch UX). Not required;
+  the CI release path uses ad-hoc signing.
 
-## Notes / gotchas
+## Gatekeeper note
 
-- **Stapling matters:** without it, first launch on a truly offline Mac fails Gatekeeper's online
-  check. The script staples both the app and the dmg.
-- **Models are not in the bundle:** the ~460 MB of Core ML models download on first launch (or via
-  the in-app *Install from Folder…*), so the signed app stays tiny and the notarization upload is
-  fast. Host the models per `tools/models/HOSTING.md` and set `ModelRegistry.baseURL`.
-- **No JIT / no special entitlements:** inference is pure Core ML (data, not executable code), so
-  there's nothing that trips Hardened Runtime. Do not add `get-task-allow` to the release build.
-- **Local testing without an account:** `scripts/dmg-local.sh` builds an ad-hoc `.dmg` (other Macs
-  need right-click → Open to bypass Gatekeeper).
+Ad-hoc signed apps aren't notarized, so the first launch on another Mac needs a right-click →
+**Open** to clear Gatekeeper. Sparkle auto-updates work regardless.

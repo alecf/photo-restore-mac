@@ -9,6 +9,9 @@ options:
 packages:
   RestoreEngine:
     path: RestoreEngine
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    from: "2.6.0"
 
 targets:
   PhotoRestore:
@@ -18,15 +21,28 @@ targets:
       - path: PhotoRestore
     dependencies:
       - package: RestoreEngine
+      - package: Sparkle
+    info:
+      path: PhotoRestore/Info.plist
+      properties:
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSMinimumSystemVersion: "14.0"
+        LSApplicationCategoryType: public.app-category.photography
+        NSHumanReadableCopyright: "MIT-licensed. © 2026 Alec Flett."
+        NSHighResolutionCapable: true
+        # Sparkle auto-update. SUPublicEDKey is set by the one-time key setup
+        # (see docs/sparkle-setup.md); the placeholder is replaced with your real key.
+        SUFeedURL: https://alecf.github.io/photo-restore-mac/appcast.xml
+        SUPublicEDKey: REPLACE_WITH_SPARKLE_PUBLIC_KEY
+        SUEnableAutomaticChecks: true
+        SUScheduledCheckInterval: 86400
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.alecf.PhotoRestore
         PRODUCT_NAME: Photo Restore
         MARKETING_VERSION: "0.1.0"
         CURRENT_PROJECT_VERSION: "1"
-        GENERATE_INFOPLIST_FILE: YES
-        INFOPLIST_KEY_LSApplicationCategoryType: "public.app-category.photography"
-        INFOPLIST_KEY_NSHumanReadableCopyright: "MIT-licensed. © Alec Flett."
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ENABLE_HARDENED_RUNTIME: YES
         DEAD_CODE_STRIPPING: YES
