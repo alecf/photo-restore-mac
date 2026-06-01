@@ -5,6 +5,19 @@
     <description>Updates for Photo Restore</description>
     <language>en</language>
     <item>
+      <title>Version 0.1.2</title>
+      <pubDate>Mon, 01 Jun 2026 23:57:54 GMT</pubDate>
+      <sparkle:version>0.1.2</sparkle:version>
+      <sparkle:shortVersionString>0.1.2</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+## CI
+
+- auto-deploy Pages from the release run
+      ]]></description>
+      <enclosure url="https://github.com/alecf/photo-restore-mac/releases/download/v0.1.2/PhotoRestore-0.1.2-arm64.dmg" type="application/octet-stream" sparkle:edSignature="csdEwsiBat1Ci7BH3l4/MlSjfJLWpzsYbtz+EBOhtbCA8RJ3WYFGMD2TqVRngAcHVRJTpUEumFdshkNQA51ADQ==" length="1642011" />
+    </item>
+    <item>
       <title>Version 0.1.1</title>
       <pubDate>Mon, 01 Jun 2026 23:09:29 GMT</pubDate>
       <sparkle:version>0.1.1</sparkle:version>
