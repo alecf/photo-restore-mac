@@ -7,8 +7,6 @@ on:
 
 permissions:
   contents: write
-  pages: write
-  id-token: write
 
 jobs:
   release:
@@ -128,22 +126,6 @@ jobs:
           done
           echo "::error::failed to push appcast"; exit 1
 
-  # The appcast push above uses GITHUB_TOKEN, which by design does NOT trigger other
-  # workflows (recursion guard) — so deploy Pages explicitly here, checking out the
-  # freshly-pushed main so the published appcast includes this release.
-  publish-pages:
-    needs: release
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: main
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: site
-      - id: deployment
-        uses: actions/deploy-pages@v4
+  # Note: Pages is NOT deployed here. The appcast push above uses GITHUB_TOKEN, which by
+  # design doesn't trigger other workflows — so Deploy Pages reacts to *this workflow
+  # completing* via a workflow_run trigger (see deploy-pages.yml).

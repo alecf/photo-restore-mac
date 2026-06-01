@@ -1,7 +1,17 @@
 name: Deploy Pages
 
-# Publishes site/ (the Sparkle appcast) to GitHub Pages whenever it changes.
+# Publishes site/ (the Sparkle appcast + download page) to GitHub Pages.
+#
+# Triggers:
+#  - workflow_run on Release: the Release workflow pushes the updated appcast using
+#    GITHUB_TOKEN, which by design does NOT trigger push-based workflows. A workflow_run
+#    trigger DOES fire on the Release run completing, so this is how a release rebuilds Pages.
+#  - push to site/** for manual edits to the page/appcast.
+#  - manual dispatch.
 on:
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
   push:
     branches: [main]
     paths: ['site/**']
@@ -18,12 +28,18 @@ concurrency:
 
 jobs:
   deploy:
+    # Skip if the Release run failed; always run for push / manual dispatch.
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      # Check out the tip of main explicitly: on a workflow_run event the default ref is the
+      # SHA from when Release started — before it pushed the appcast — so we'd miss it.
       - uses: actions/checkout@v4
+        with:
+          ref: main
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
