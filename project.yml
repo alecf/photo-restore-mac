@@ -34,7 +34,7 @@ targets:
         # Sparkle auto-update. SUPublicEDKey is set by the one-time key setup
         # (see docs/sparkle-setup.md); the placeholder is replaced with your real key.
         SUFeedURL: https://alecf.github.io/photo-restore-mac/appcast.xml
-        SUPublicEDKey: REPLACE_WITH_SPARKLE_PUBLIC_KEY
+        SUPublicEDKey: y/YDrXDVB4arxJCD1YLIpLQqOclDs8vLkHlYVkOzTlA=
         SUEnableAutomaticChecks: true
         SUScheduledCheckInterval: 86400
     settings:
