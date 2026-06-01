@@ -5,6 +5,41 @@
     <description>Updates for Photo Restore</description>
     <language>en</language>
     <item>
+      <title>Version 0.1.1</title>
+      <pubDate>Mon, 01 Jun 2026 23:09:29 GMT</pubDate>
+      <sparkle:version>0.1.1</sparkle:version>
+      <sparkle:shortVersionString>0.1.1</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+## Bug Fixes
+
+- move top controls into the window toolbar; add prepare-models tool
+- make git-cliff tag_pattern accept the bare bumped version
+
+## CI
+
+- Sparkle auto-update + GitHub Actions release/CI/PR workflows
+
+## Features
+
+- scaffold Photo Restore app + RestoreEngine classical stages (U1)
+- adopt + validate pre-converted Core ML models (U2)
+- model registry + resumable downloader + compile/cache (U3)
+- Real-ESRGAN Core ML upscale + tiled seam-blended assembly (U4)
+- Apple Vision face detection + 512 alignment (U5)
+- GFPGAN restore + parse-mask paste-back, full RestorePipeline (U6)
+- serial InferenceEngine + BatchCoordinator + data-safe output policy (U7)
+- full SwiftUI app — drag-drop, filmstrip, before/after, live preview, settings (U8)
+- packaging, signing, notarization tooling + docs (U9)
+- persistent settings inspector, per-result settings, redo + reorderable filmstrip
+
+## Testing
+
+- replace personal photo fixtures with a public-domain portrait
+      ]]></description>
+      <enclosure url="https://github.com/alecf/photo-restore-mac/releases/download/v0.1.1/PhotoRestore-0.1.1-arm64.dmg" type="application/octet-stream" sparkle:edSignature="G5Z4KM+Yo8zYCca1tbmen0p2EnjKKU5TAH4nAmEACPGs+LClix2KNtxle2EgRlMPjS7k3ctWrv0KzgzpL28kDg==" length="1641956" />
+    </item>
+    <item>
       <title>Version 0.1.0</title>
       <pubDate>Mon, 01 Jun 2026 23:01:24 GMT</pubDate>
       <sparkle:version>0.1.0</sparkle:version>
