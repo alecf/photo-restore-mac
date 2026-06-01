@@ -28,7 +28,8 @@ commit_parsers = [
 ]
 protect_breaking_commits = false
 filter_commits = false
-tag_pattern = "v[0-9].*"
+# `v` optional so the bare bumped version (e.g. 0.1.0) validates while still matching v-tags.
+tag_pattern = "v?[0-9].*"
 
 [bump]
 features_always_bump_minor = true
