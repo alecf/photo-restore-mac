@@ -51,3 +51,22 @@ targets:
         DEVELOPMENT_ASSET_PATHS: '"PhotoRestore/Preview Content"'
         CODE_SIGN_STYLE: Automatic
         CODE_SIGN_IDENTITY: "-"
+    scheme:
+      testTargets:
+        - PhotoRestoreTests
+
+  PhotoRestoreTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: PhotoRestoreTests
+    dependencies:
+      - target: PhotoRestore
+      - package: RestoreEngine
+    settings:
+      base:
+        SWIFT_VERSION: "5.0"
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: "-"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Photo Restore.app/Contents/MacOS/Photo Restore"
