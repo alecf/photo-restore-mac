@@ -15,17 +15,19 @@ struct BeforeAfterView: View {
     var body: some View {
         VStack(spacing: 0) {
             GeometryReader { geo in
-                let w = geo.size.width
+                // The image is letterboxed/pillarboxed within the frame by scaledToFit,
+                // so bound the divider, mask, and drag to the displayed image rect — not the frame.
+                let rect = imageRect(container: geo.size, image: after ?? before)
                 ZStack {
                     if let after {
                         fit(after)
                         if let before {
                             fit(before)
                                 .mask(alignment: .leading) {
-                                    Rectangle().frame(width: max(0, w * fraction))
+                                    Rectangle().frame(width: max(0, rect.minX + rect.width * fraction))
                                 }
-                            handle(in: geo.size)
-                            labels
+                            handle(in: rect)
+                            labels(in: rect)
                         }
                     } else if let before {
                         fit(before).opacity(0.6)
@@ -37,13 +39,25 @@ struct BeforeAfterView: View {
                 .contentShape(Rectangle())
                 .gesture(
                     DragGesture(minimumDistance: 0).onChanged { v in
-                        fraction = min(1, max(0, v.location.x / w))
+                        guard rect.width > 0 else { return }
+                        fraction = min(1, max(0, (v.location.x - rect.minX) / rect.width))
                     }
                 )
             }
             settingsBar
         }
         .padding(16)
+    }
+
+    /// The rect occupied by the scaledToFit image within `container`, accounting for letterboxing.
+    private func imageRect(container: CGSize, image: NSImage?) -> CGRect {
+        guard let image, image.size.width > 0, image.size.height > 0 else {
+            return CGRect(origin: .zero, size: container)
+        }
+        let scale = min(container.width / image.size.width, container.height / image.size.height)
+        let w = image.size.width * scale
+        let h = image.size.height * scale
+        return CGRect(x: (container.width - w) / 2, y: (container.height - h) / 2, width: w, height: h)
     }
 
     /// Shows which settings were active for this result — only the divergences from defaults.
@@ -73,20 +87,20 @@ struct BeforeAfterView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private func handle(in size: CGSize) -> some View {
+    private func handle(in rect: CGRect) -> some View {
         Rectangle()
             .fill(.white)
-            .frame(width: 2)
+            .frame(width: 2, height: rect.height)
             .overlay(
                 Circle().fill(.white).frame(width: 26, height: 26)
                     .overlay(Image(systemName: "arrow.left.and.right").font(.caption2).foregroundStyle(.black))
                     .shadow(radius: 2)
             )
-            .position(x: size.width * fraction, y: size.height / 2)
+            .position(x: rect.minX + rect.width * fraction, y: rect.midY)
             .allowsHitTesting(false)
     }
 
-    private var labels: some View {
+    private func labels(in rect: CGRect) -> some View {
         VStack {
             HStack {
                 tag("Before"); Spacer(); tag("After")
@@ -94,6 +108,8 @@ struct BeforeAfterView: View {
             Spacer()
         }
         .padding(8)
+        .frame(width: rect.width, height: rect.height)
+        .position(x: rect.midX, y: rect.midY)
     }
 
     private func tag(_ text: String) -> some View {
