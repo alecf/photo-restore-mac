@@ -106,7 +106,7 @@ final class AppModel: ObservableObject {
         )
     }
 
-    private func sizeTarget() -> Resolution.Target {
+    func sizeTarget() -> Resolution.Target {
         switch sizeChoice {
         case .keep: return .same
         case .x2: return .scale(factor: 2)
@@ -226,7 +226,7 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private func apply(_ event: BatchEvent) {
+    func apply(_ event: BatchEvent) {
         switch event {
         case .itemStarted(let id):
             update(id) { $0.status = .processing }
@@ -254,7 +254,7 @@ final class AppModel: ObservableObject {
 
     // MARK: - Folder expansion
 
-    private func expand(_ urls: [URL]) -> [URL] {
+    func expand(_ urls: [URL]) -> [URL] {
         var found: [URL] = []
         for url in urls {
             if (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true {

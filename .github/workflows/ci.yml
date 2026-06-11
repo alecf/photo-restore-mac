@@ -34,5 +34,11 @@ jobs:
             -configuration Debug -destination 'platform=macOS' \
             CODE_SIGNING_ALLOWED=NO build
 
+      - name: Run app tests
+        run: |
+          xcodebuild -project PhotoRestore.xcodeproj -scheme PhotoRestore \
+            -configuration Debug -destination 'platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO test
+
       - name: Run engine tests
         run: cd RestoreEngine && swift test

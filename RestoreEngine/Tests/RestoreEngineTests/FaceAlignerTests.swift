@@ -47,6 +47,12 @@ final class FaceAlignerTests: XCTestCase {
         XCTAssertEqual(out.pixels, img.pixels)
     }
 
+    func testInverseOfSingularMatrixIsNil() {
+        // det = a*d - b*c = 1*4 - 2*2 = 0
+        let singular = Affine2x3(a: 1, b: 2, tx: 0, c: 2, d: 4, ty: 0)
+        XCTAssertNil(singular.inverse)
+    }
+
     func testWarpFillsBorderOutsideSource() {
         // Shift the source far out of view → the whole crop should be the border color.
         let img = RGBImage(width: 16, height: 16, fill: 200)
