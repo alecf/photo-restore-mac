@@ -15,9 +15,11 @@ final class AppModelTests: XCTestCase {
     /// A fresh temp directory, with symlinks resolved so URLs built from it match the
     /// (resolved) paths `FileManager`'s directory enumerator returns inside `expand`.
     private func makeTempDirectory() throws -> URL {
-        let tmp = FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString, isDirectory: true)
-            .resolvingSymlinksInPath()
+        // Resolve symlinks on the (existing) temp root first -- /var -> /private/var on
+        // macOS -- so URLs built from `tmp` match the resolved paths the directory
+        // enumerator returns inside `expand`.
+        let base = FileManager.default.temporaryDirectory.resolvingSymlinksInPath()
+        let tmp = base.appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
         return tmp
     }
