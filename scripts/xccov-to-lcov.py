@@ -49,10 +49,18 @@ def main():
             if path in seen_paths or not path.startswith(repo_root):
                 continue
             seen_paths.add(path)
+            if file_entry.get("executableLines", 0) == 0:
+                continue
+
+            try:
+                lines = list(file_line_counts(xcresult, path))
+            except subprocess.CalledProcessError as exc:
+                print(f"warning: skipping {path}: {exc.stderr.strip()}", file=sys.stderr)
+                continue
 
             rel_path = os.path.relpath(path, repo_root)
             print(f"SF:{rel_path}")
-            for line_no, count in file_line_counts(xcresult, path):
+            for line_no, count in lines:
                 print(f"DA:{line_no},{count}")
             print("end_of_record")
 
