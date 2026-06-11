@@ -12,17 +12,16 @@ final class AppModelTests: XCTestCase {
         UIItem(id: id, input: input, status: status, afterPreview: nil, appliedConfig: appliedConfig)
     }
 
-    /// A fresh temp directory, with symlinks resolved so URLs built from it match the
-    /// (resolved) paths `FileManager`'s directory enumerator returns inside `expand`.
     private func makeTempDirectory() throws -> URL {
-        // Resolve symlinks on the (existing) temp root first -- /var -> /private/var on
-        // macOS -- so URLs built from `tmp` match the resolved paths the directory
-        // enumerator returns inside `expand`.
-        let base = FileManager.default.temporaryDirectory.resolvingSymlinksInPath()
-        let tmp = base.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
         return tmp
     }
+
+    /// Resolve symlinks on both sides of a path comparison -- `expand`'s directory enumerator
+    /// returns resolved paths (e.g. /private/var on macOS), which may differ from the
+    /// unresolved paths used to construct test fixtures.
+    private func resolved(_ urls: [URL]) -> [URL] { urls.map { $0.resolvingSymlinksInPath() } }
 
     // MARK: - sizeTarget
 
@@ -147,7 +146,7 @@ final class AppModelTests: XCTestCase {
         try ImageSaving.save(RGBImage(width: 2, height: 2, fill: 1), to: imgA)
         try "hello".write(to: txt, atomically: true, encoding: .utf8)
 
-        XCTAssertEqual(model.expand([tmp]), [imgA, imgB])
+        XCTAssertEqual(resolved(model.expand([tmp])), resolved([imgA, imgB]))
     }
 
     func testExpandRespectsIncludeSubfoldersToggle() throws {
@@ -163,10 +162,10 @@ final class AppModelTests: XCTestCase {
         try ImageSaving.save(RGBImage(width: 2, height: 2, fill: 1), to: nested)
 
         model.includeSubfolders = false
-        XCTAssertEqual(model.expand([tmp]), [top])
+        XCTAssertEqual(resolved(model.expand([tmp])), resolved([top]))
 
         model.includeSubfolders = true
-        XCTAssertEqual(model.expand([tmp]), [nested, top])
+        XCTAssertEqual(resolved(model.expand([tmp])), resolved([nested, top]))
     }
 
     func testExpandDedupesAgainstExistingItems() throws {
@@ -181,7 +180,7 @@ final class AppModelTests: XCTestCase {
 
         model.items = [makeItem(input: imgA)]
 
-        XCTAssertEqual(model.expand([tmp]), [imgB])
+        XCTAssertEqual(resolved(model.expand([tmp])), resolved([imgB]))
     }
 
     // MARK: - apply (event stream -> UI state)
