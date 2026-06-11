@@ -15,15 +15,12 @@ fi
 if [ -d RestoreEngine ]; then
   pushd RestoreEngine > /dev/null
 
-  BIN_PATH=$(swift build --show-bin-path 2>/dev/null)
-  PROF_PATH=$(swift test --show-codecov-path 2>/dev/null)
-  TEST_BINARY="$BIN_PATH/RestoreEnginePackageTests.xctest/Contents/MacOS/RestoreEnginePackageTests"
+  COV_PATH=$(swift test --show-codecov-path 2>/dev/null)
 
-  if [ -f "$TEST_BINARY" ] && [ -f "$PROF_PATH" ]; then
-    ENGINE_REPORT=$(xcrun llvm-cov report "$TEST_BINARY" -instr-profile "$PROF_PATH" -ignore-filename-regex='\.build|/Tests/')
-    LINE=$(echo "$ENGINE_REPORT" | grep '^TOTAL')
-    if [ -n "$LINE" ]; then
-      ENGINE_PCT=$(echo "$LINE" | awk '{print $NF}')
+  if [ -f "$COV_PATH" ]; then
+    ENGINE_PERCENT=$(jq -r '.data[0].totals.lines.percent' "$COV_PATH")
+    if [ -n "$ENGINE_PERCENT" ] && [ "$ENGINE_PERCENT" != "null" ]; then
+      ENGINE_PCT=$(awk "BEGIN { printf \"%.2f%%\", $ENGINE_PERCENT }")
     fi
   fi
 
