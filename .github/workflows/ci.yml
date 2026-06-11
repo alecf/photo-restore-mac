@@ -49,13 +49,55 @@ jobs:
       - name: Run engine tests
         run: cd RestoreEngine && swift test --enable-code-coverage
 
-      - name: Generate coverage report
-        if: always()
-        run: scripts/coverage-summary.sh
+      - name: Generate lcov reports
+        run: |
+          mkdir -p coverage
 
-      - name: Post coverage comment
-        if: always() && github.event_name == 'pull_request'
-        uses: marocchino/sticky-pull-request-comment@v2
+          # RestoreEngine (SwiftPM) coverage
+          cd RestoreEngine
+          BIN_PATH=$(swift build --show-bin-path)
+          xcrun llvm-cov export -format=lcov \
+            -instr-profile "$BIN_PATH/codecov/default.profdata" \
+            "$BIN_PATH/RestoreEnginePackageTests.xctest/Contents/MacOS/RestoreEnginePackageTests" \
+            -ignore-filename-regex='\.build|/Tests/' > ../coverage/engine.lcov
+          cd ..
+          sed -i '' "s#${GITHUB_WORKSPACE}/##g" coverage/engine.lcov
+
+          # PhotoRestore app (xcodebuild) coverage
+          python3 scripts/xccov-to-lcov.py TestResults.xcresult "$GITHUB_WORKSPACE" > coverage/app.lcov
+
+          cat coverage/app.lcov coverage/engine.lcov > coverage/lcov.info
+
+      - name: Ensure base coverage placeholder exists
+        if: github.event_name == 'pull_request'
+        run: mkdir -p base-coverage && touch base-coverage/lcov.info
+
+      - name: Restore base coverage
+        if: github.event_name == 'pull_request'
+        uses: actions/cache/restore@v4
         with:
-          header: coverage
-          path: coverage-summary.md
+          path: base-coverage
+          key: lcov-main-
+          restore-keys: |
+            lcov-main-
+
+      - name: Report coverage on PR
+        if: github.event_name == 'pull_request'
+        uses: romeovs/lcov-reporter-action@v0.4.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          lcov-file: coverage/lcov.info
+          lcov-base: base-coverage/lcov.info
+
+      - name: Save base coverage
+        if: github.ref == 'refs/heads/main'
+        run: |
+          mkdir -p base-coverage
+          cp coverage/lcov.info base-coverage/lcov.info
+
+      - name: Cache base coverage
+        if: github.ref == 'refs/heads/main'
+        uses: actions/cache/save@v4
+        with:
+          path: base-coverage
+          key: lcov-main-${{ github.sha }}
