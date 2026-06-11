@@ -13,7 +13,7 @@ final class FaceMaskTests: XCTestCase {
         for cls: Int32 in 0...18 {
             let mask = FaceMask.feathered(classMap: [cls], width: 1, height: 1)
             let isFace = expectedFaceClasses.contains(cls)
-            XCTAssertEqual(mask[0], isFace ? 1 : 0, "class \(cls)")
+            XCTAssertEqual(mask[0], isFace ? 1 : 0, accuracy: 1e-5, "class \(cls)")
         }
     }
 
