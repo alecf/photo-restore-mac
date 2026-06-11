@@ -41,6 +41,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.alecf.PhotoRestore
         PRODUCT_NAME: Photo Restore
+        PRODUCT_MODULE_NAME: PhotoRestore
         MARKETING_VERSION: "0.1.0"
         CURRENT_PROJECT_VERSION: "1"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
