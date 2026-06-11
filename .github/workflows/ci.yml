@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   build-and-test:
     runs-on: macos-15
@@ -38,7 +42,20 @@ jobs:
         run: |
           xcodebuild -project PhotoRestore.xcodeproj -scheme PhotoRestore \
             -configuration Debug -destination 'platform=macOS' \
+            -enableCodeCoverage YES \
+            -resultBundlePath TestResults.xcresult \
             CODE_SIGNING_ALLOWED=NO test
 
       - name: Run engine tests
-        run: cd RestoreEngine && swift test
+        run: cd RestoreEngine && swift test --enable-code-coverage
+
+      - name: Generate coverage report
+        if: always()
+        run: scripts/coverage-summary.sh
+
+      - name: Post coverage comment
+        if: always() && github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: coverage
+          path: coverage-summary.md
