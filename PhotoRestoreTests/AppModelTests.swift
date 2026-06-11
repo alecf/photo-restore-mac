@@ -12,6 +12,16 @@ final class AppModelTests: XCTestCase {
         UIItem(id: id, input: input, status: status, afterPreview: nil, appliedConfig: appliedConfig)
     }
 
+    /// A fresh temp directory, with symlinks resolved so URLs built from it match the
+    /// (resolved) paths `FileManager`'s directory enumerator returns inside `expand`.
+    private func makeTempDirectory() throws -> URL {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+            .resolvingSymlinksInPath()
+        try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
+        return tmp
+    }
+
     // MARK: - sizeTarget
 
     func testSizeTargetKeepIsSame() {
@@ -125,8 +135,7 @@ final class AppModelTests: XCTestCase {
 
     func testExpandFindsImagesSortedAndIgnoresNonImages() throws {
         let model = AppModel()
-        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-        try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
+        let tmp = try makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: tmp) }
 
         let imgB = tmp.appendingPathComponent("b.png")
@@ -141,7 +150,7 @@ final class AppModelTests: XCTestCase {
 
     func testExpandRespectsIncludeSubfoldersToggle() throws {
         let model = AppModel()
-        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let tmp = try makeTempDirectory()
         let sub = tmp.appendingPathComponent("sub", isDirectory: true)
         try FileManager.default.createDirectory(at: sub, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tmp) }
@@ -160,8 +169,7 @@ final class AppModelTests: XCTestCase {
 
     func testExpandDedupesAgainstExistingItems() throws {
         let model = AppModel()
-        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-        try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
+        let tmp = try makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: tmp) }
 
         let imgA = tmp.appendingPathComponent("a.png")
