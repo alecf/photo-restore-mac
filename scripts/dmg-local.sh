@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Build a local, ad-hoc-signed .dmg for testing on this machine (NOT notarized — other Macs
-# will need a right-click → Open to bypass Gatekeeper). Needs no Apple credentials.
+# Build a local, ad-hoc-signed .dmg for testing on this machine (NOT notarized — on other Macs
+# Gatekeeper blocks the first launch; see the Gatekeeper note in RELEASE.md). Needs no Apple credentials.
 #
 # Usage: scripts/dmg-local.sh
 set -euo pipefail
