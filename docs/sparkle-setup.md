@@ -46,7 +46,7 @@ publishes `site/` (the appcast + a download page) to
 `https://alecf.github.io/photo-restore-mac/`, which is the `SUFeedURL` the app checks.
 
 ## Notes
-- The DMG is **ad-hoc signed** (no paid Apple Developer account). First launch on another Mac
-  needs a right-click → Open to clear Gatekeeper. Sparkle updates still work.
+- The DMG is **ad-hoc signed** (no paid Apple Developer account). Gatekeeper blocks the first
+  launch on another Mac; see the Gatekeeper note in `RELEASE.md`. Sparkle updates still work.
 - To cut a release: `gh workflow run release.yml`. git-cliff bumps the version from your
   conventional commits, builds, signs, publishes the Release + appcast.
