@@ -34,8 +34,8 @@ Pages (Source: GitHub Actions). The release workflow refuses to run until the se
 
 ## Gatekeeper note
 
-Ad-hoc signed apps aren't notarized, so Gatekeeper blocks the first launch on another Mac. On
-macOS 15 and later, right-click → **Open** no longer gets past it. Instead, try to open the app once,
-then go to System Settings → Privacy & Security and click **Open Anyway**. Or clear the quarantine
+Ad-hoc signed apps aren't notarized, so Gatekeeper blocks the first launch on another Mac. To get
+past it, try to open the app once, then go to System Settings → Privacy & Security and click
+**Open Anyway**. Or clear the quarantine
 flag from Terminal: `xattr -dr com.apple.quarantine "/Applications/Photo Restore.app"`. The FAQ on
 the landing page (`site/index.html`) gives users the same steps. Sparkle auto-updates work regardless.
