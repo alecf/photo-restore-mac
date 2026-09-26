@@ -3,19 +3,330 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Photo Restore</title>
+  <title>Photo Restore for Mac</title>
+  <meta name="description" content="A free, open-source Mac app that restores old family-photo scans on-device: fixes fading, upscales, and sharpens faces. Nothing leaves your Mac.">
+  <link rel="alternate" type="application/rss+xml" title="Photo Restore updates" href="appcast.xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Besley:ital,wght@0,500;0,700;1,500&display=swap" rel="stylesheet">
   <style>
-    body { font: 16px/1.6 -apple-system, system-ui, sans-serif; max-width: 40rem; margin: 4rem auto; padding: 0 1.25rem; color: #1d1d1f; }
-    a { color: #0066cc; }
-    code { background: #f4f4f5; padding: .1em .35em; border-radius: 4px; }
+    :root {
+      --mat: #e4e6e1;        /* archival mat board */
+      --mat-deep: #d6d9d2;
+      --ink: #1e2724;
+      --ink-soft: #4d5752;
+      --corner: #1e2724;     /* photo corners */
+      --accent: #2f6e78;     /* faded Ektachrome cyan */
+      --accent-ink: #f4f6f3;
+      --rule: #b7bbb3;
+      --print: #f7f7f3;      /* photo paper border */
+      --code-bg: #d3d7cf;
+      color-scheme: light dark;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --mat: #232b28;      /* black album page */
+        --mat-deep: #1b2220;
+        --ink: #e6e8e3;
+        --ink-soft: #a9b1ac;
+        --corner: #070a09;
+        --accent: #7fb7bf;
+        --accent-ink: #13201f;
+        --rule: #3c4843;
+        --print: #313c38;
+        --code-bg: #34403c;
+      }
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      margin: 0;
+      background: var(--mat);
+      color: var(--ink);
+      font: 17px/1.6 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    }
+    a { color: var(--accent); text-underline-offset: .18em; }
+    a:focus-visible, button:focus-visible, summary:focus-visible {
+      outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px;
+    }
+    code {
+      font: .88em ui-monospace, "SF Mono", Menlo, monospace;
+      background: var(--code-bg); padding: .1em .35em; border-radius: 3px;
+    }
+    h1, h2, h3 { font-family: Besley, Georgia, serif; font-weight: 700; line-height: 1.15; margin: 0; }
+
+    .wrap { max-width: 60rem; margin: 0 auto; padding: 0 1.25rem; }
+
+    /* ---- hero: the page's title card, mounted in the album with four corners ---- */
+    .hero { padding: 4.5rem 0 3.5rem; }
+    .mount {
+      position: relative;
+      background: var(--print);
+      padding: clamp(2rem, 6vw, 4rem) clamp(1.5rem, 6vw, 4.5rem);
+      box-shadow: 0 1px 0 var(--rule), 0 12px 30px -18px rgba(20, 30, 28, .45);
+      transform: rotate(-.6deg);
+    }
+    .mount > :not(.corner) { transform: rotate(.6deg); }
+    .corner {
+      position: absolute; width: 2.4rem; height: 2.4rem; background: var(--corner);
+      clip-path: polygon(0 0, 100% 0, 0 100%);
+    }
+    .corner.tl { top: -.5rem; left: -.5rem; }
+    .corner.tr { top: -.5rem; right: -.5rem; transform: rotate(90deg); }
+    .corner.br { bottom: -.5rem; right: -.5rem; transform: rotate(180deg); }
+    .corner.bl { bottom: -.5rem; left: -.5rem; transform: rotate(270deg); }
+
+    .hero h1 {
+      font-size: clamp(2.6rem, 8vw, 4.75rem);
+      letter-spacing: -.015em;
+      max-width: 12ch;
+    }
+    .hero .lede {
+      font-size: clamp(1.1rem, 2.4vw, 1.3rem);
+      color: var(--ink-soft);
+      max-width: 36rem;
+      margin: 1.25rem 0 2rem;
+    }
+    .actions { display: flex; flex-wrap: wrap; gap: .75rem 1.5rem; align-items: center; }
+    .button {
+      display: inline-block;
+      background: var(--accent); color: var(--accent-ink);
+      font-weight: 600; text-decoration: none;
+      padding: .8rem 1.35rem; border-radius: 6px;
+    }
+    .button:hover { filter: brightness(1.08); }
+    .fine { font-size: .9rem; color: var(--ink-soft); }
+    .fine a { color: inherit; }
+
+    /* ---- sections ---- */
+    section { padding: 3.5rem 0; border-top: 1px solid var(--rule); }
+    section h2 { font-size: clamp(1.6rem, 3.5vw, 2.1rem); margin-bottom: 1.75rem; max-width: 22ch; }
+    .intro { max-width: 40rem; color: var(--ink-soft); margin: -0.75rem 0 2rem; }
+
+    .features { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2.25rem 3rem; margin: 0; }
+    .features dt { font-family: Besley, Georgia, serif; font-weight: 700; font-size: 1.2rem; margin-bottom: .35rem; }
+    .features dd { margin: 0; color: var(--ink-soft); max-width: 34ch; }
+
+    .steps { list-style: none; margin: 0; padding: 0; counter-reset: step; max-width: 44rem; }
+    .steps li {
+      counter-increment: step;
+      display: grid; grid-template-columns: 2.75rem 1fr; gap: 0 1rem;
+      padding: 1rem 0;
+    }
+    .steps li + li { border-top: 1px dashed var(--rule); }
+    .steps li::before {
+      content: counter(step);
+      font-family: Besley, Georgia, serif; font-weight: 700; font-size: 1.6rem; line-height: 1.2;
+      color: var(--accent);
+    }
+    .steps strong { display: block; }
+    .steps span { color: var(--ink-soft); }
+
+    .split { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 3rem; align-items: start; }
+    .split p { margin: 0 0 1rem; max-width: 36rem; }
+    table { width: 100%; border-collapse: collapse; font-size: .95rem; }
+    caption { text-align: left; font-weight: 600; padding-bottom: .5rem; }
+    th, td { text-align: left; padding: .55rem .5rem .55rem 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+    th { font-weight: 600; }
+    td:last-child { color: var(--ink-soft); white-space: nowrap; }
+
+    details { border-bottom: 1px solid var(--rule); max-width: 44rem; }
+    details:first-of-type { border-top: 1px solid var(--rule); }
+    summary {
+      cursor: pointer; list-style: none; padding: 1rem 2rem 1rem 0; position: relative;
+      font-weight: 600;
+    }
+    summary::-webkit-details-marker { display: none; }
+    summary::after {
+      content: "+"; position: absolute; right: .25rem; top: .85rem;
+      font-family: Besley, Georgia, serif; font-size: 1.35rem; color: var(--accent);
+    }
+    details[open] summary::after { content: "\2212"; }
+    details > div { padding: 0 0 1.25rem; color: var(--ink-soft); }
+    details > div p { margin: 0 0 .75rem; }
+    details ol { margin: 0 0 .75rem; padding-left: 1.25rem; }
+
+    footer { border-top: 1px solid var(--rule); padding: 2rem 0 3rem; font-size: .9rem; color: var(--ink-soft); }
+    footer p { margin: 0 0 .4rem; }
+    footer a { color: inherit; }
+
+    @media (max-width: 720px) {
+      .hero { padding-top: 2.5rem; }
+      .features, .split { grid-template-columns: 1fr; gap: 1.75rem; }
+      td:last-child { white-space: normal; }
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      .mount { transition: transform .4s ease; }
+      .mount:hover { transform: rotate(0deg); }
+      .mount:hover > :not(.corner) { transform: none; }
+      .mount > :not(.corner) { transition: transform .4s ease; }
+    }
   </style>
 </head>
 <body>
-  <h1>Photo Restore</h1>
-  <p>A dirt-simple native macOS app that restores old family-photo scans on-device. Drag in a
-     photo or folder, watch it restore.</p>
-  <p><a href="https://github.com/alecf/photo-restore-mac/releases/latest">Download the latest release →</a></p>
-  <p>The app checks this site's <a href="appcast.xml">appcast</a> for updates via Sparkle.</p>
-  <p>Open source (MIT) on <a href="https://github.com/alecf/photo-restore-mac">GitHub</a>.</p>
+  <main>
+    <header class="hero">
+      <div class="wrap">
+        <div class="mount">
+          <span class="corner tl" aria-hidden="true"></span>
+          <span class="corner tr" aria-hidden="true"></span>
+          <span class="corner br" aria-hidden="true"></span>
+          <span class="corner bl" aria-hidden="true"></span>
+          <h1>Photo Restore</h1>
+          <p class="lede">A small Mac app for old family-photo scans. Drag in a faded print or a whole
+            folder of them, and it fixes the fading, sharpens the faces, and scales them up. It all
+            happens on your Mac.</p>
+          <div class="actions">
+            <a class="button" id="download" href="https://github.com/alecf/photo-restore-mac/releases/latest">Download for Mac</a>
+            <span class="fine"><span id="version">Latest release</span>. Apple Silicon, macOS 14 or later. Free and <a href="https://github.com/alecf/photo-restore-mac">open source</a>.</span>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <section aria-labelledby="what">
+      <div class="wrap">
+        <h2 id="what">What it does to a photo</h2>
+        <dl class="features">
+          <div>
+            <dt>Brings back faded contrast</dt>
+            <dd>Stretches washed-out scans back to a full tonal range without shifting the color.
+              It never colorizes: a black-and-white photo stays black and white.</dd>
+          </div>
+          <div>
+            <dt>Scales up small prints</dt>
+            <dd>Upscales 2×, 3× or 4× with Real-ESRGAN, or fits the result to a size you choose.
+              Big images are processed in overlapping tiles, so there are no visible seams.</dd>
+          </div>
+          <div>
+            <dt>Sharpens faces, and only faces</dt>
+            <dd>Finds each face, restores it with GFPGAN, and blends it back in with a mask so hair,
+              clothes and background are left alone. Grain and skin texture are matched to the
+              original, and an intensity slider lets you keep it subtle.</dd>
+          </div>
+          <div>
+            <dt>Handles a whole shoebox</dt>
+            <dd>Drop in a folder of a hundred scans. A filmstrip shows every photo's progress, and a
+              before/after slider lets you compare each result with the original.</dd>
+          </div>
+        </dl>
+      </div>
+    </section>
+
+    <section aria-labelledby="how">
+      <div class="wrap">
+        <h2 id="how">How it works</h2>
+        <p class="intro">Each photo goes through the same steps, in this order. You can switch
+          off any step you don't want in the settings panel.</p>
+        <ol class="steps">
+          <li><div><strong>Auto-contrast</strong><span>Brightness is rebalanced on luminance only, so the original color cast is kept.</span></div></li>
+          <li><div><strong>Upscale</strong><span>Real-ESRGAN enlarges the whole image, tile by tile, with feathered seams.</span></div></li>
+          <li><div><strong>Find faces</strong><span>Apple's Vision framework locates each face and aligns it to a 512&nbsp;px crop.</span></div></li>
+          <li><div><strong>Restore faces</strong><span>GFPGAN rebuilds detail in each crop. Faces that are already sharp can be skipped.</span></div></li>
+          <li><div><strong>Paste back</strong><span>A face-parsing mask composites the restored face into the photo, with color and grain matched to its surroundings.</span></div></li>
+        </ol>
+      </div>
+    </section>
+
+    <section aria-labelledby="private">
+      <div class="wrap split">
+        <div>
+          <h2 id="private">Your photos stay on your Mac</h2>
+          <p>Every step runs locally on Apple Silicon through Core ML. There is no account, no
+            upload and no cloud service. The app goes online for two things only: downloading its
+            models once, and checking for app updates.</p>
+          <p>Originals are never modified. Results are written to a separate output folder, and
+            existing files are only replaced if you turn on overwriting.</p>
+        </div>
+        <table>
+          <caption>Models used (about 460&nbsp;MB, downloaded once)</caption>
+          <thead><tr><th scope="col">Model</th><th scope="col">Job</th><th scope="col">License</th></tr></thead>
+          <tbody>
+            <tr><td>Real-ESRGAN x4plus</td><td>Upscaling</td><td>BSD-3</td></tr>
+            <tr><td>GFPGAN</td><td>Face restoration</td><td>Apache-2.0</td></tr>
+            <tr><td>BiSeNet</td><td>Face masks</td><td>MIT</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section aria-labelledby="faq">
+      <div class="wrap">
+        <h2 id="faq">Questions</h2>
+
+        <details>
+          <summary>macOS says the app can't be opened</summary>
+          <div>
+            <p>Photo Restore isn't signed with a paid Apple Developer ID yet, so Gatekeeper blocks
+              it the first time. To open it anyway:</p>
+            <ol>
+              <li>Drag Photo Restore from the disk image into Applications and try to open it once.</li>
+              <li>Open System Settings, go to Privacy &amp; Security, and click <strong>Open Anyway</strong> next to the Photo Restore message.</li>
+            </ol>
+            <p>Or, from Terminal: <code>xattr -dr com.apple.quarantine "/Applications/Photo Restore.app"</code></p>
+          </div>
+        </details>
+
+        <details>
+          <summary>Does it work on Intel Macs?</summary>
+          <div><p>No. It needs an Apple Silicon Mac (M1 or later) running macOS 14 Sonoma or newer.</p></div>
+        </details>
+
+        <details>
+          <summary>Can I use it without an internet connection?</summary>
+          <div>
+            <p>Yes, once the models are installed. If you already have the three model files
+              (<code>RealESRGAN4x.mlmodel</code>, <code>GFPGAN.mlmodel</code>,
+              <code>FaceParsing.mlmodel</code>), choose <strong>Install from Folder</strong> on the
+              first-run screen instead of downloading them.</p>
+          </div>
+        </details>
+
+        <details>
+          <summary>Will it change what people's faces look like?</summary>
+          <div>
+            <p>Face restoration models fill in detail that the scan doesn't contain, so it can. Lower
+              the intensity slider to keep more of the original texture, turn on "Skip already-sharp
+              faces", or switch face restoration off entirely. The before/after slider makes it easy
+              to check each result.</p>
+          </div>
+        </details>
+
+        <details>
+          <summary>How do updates work?</summary>
+          <div>
+            <p>The app checks this site's <a href="appcast.xml">update feed</a> using Sparkle and
+              offers new versions as they come out. Every update is signed, and the app verifies the
+              signature before installing it.</p>
+          </div>
+        </details>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <p>Photo Restore is MIT-licensed. Source, issues and release notes are on
+        <a href="https://github.com/alecf/photo-restore-mac">GitHub</a>.</p>
+      <p>Built by Alec Flett.</p>
+    </div>
+  </footer>
+
+  <script>
+    // Point the download button straight at the newest DMG from the Sparkle appcast.
+    // If anything fails, the button keeps its fallback link to the latest GitHub release.
+    fetch("appcast.xml")
+      .then(r => r.ok ? r.text() : Promise.reject(r.status))
+      .then(text => {
+        const item = new DOMParser().parseFromString(text, "application/xml").querySelector("item");
+        const enclosure = item && item.querySelector("enclosure");
+        const version = item && item.getElementsByTagNameNS("*", "shortVersionString")[0];
+        if (!enclosure || !version) return;
+        document.getElementById("download").href = enclosure.getAttribute("url");
+        document.getElementById("version").textContent = "Version " + version.textContent.trim();
+      })
+      .catch(() => {});
+  </script>
 </body>
 </html>
