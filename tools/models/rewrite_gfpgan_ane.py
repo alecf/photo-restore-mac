@@ -63,6 +63,11 @@ C = 1.0 / 8        # scale on x*s; undone in the conv weights
 FP16_MAX = 65504.0
 MIN_PSNR_DB = 50.0
 FP16_HEADROOM = 8  # every intermediate must stay below FP16_MAX / this
+# The fp16 probe exposes every intermediate as a model output, and all ~500 at once need far more
+# memory than a CI runner has. So it splits them into batches, spreading the large late tensors
+# evenly, and uses the inputs with the highest peaks: a real face, a saturated image, and noise.
+PROBE_BATCHES = 20
+PROBE_INPUTS = ("woolf-1927-f0", "red", "noise")
 
 
 def load_rgb(path) -> Image.Image:
@@ -219,30 +224,45 @@ def verification_inputs():
     return items
 
 
-def verify(src_path, out_path):
-    """The rewritten model on the Neural Engine must match the original on the CPU, and every
-    watched intermediate value must stay far below the fp16 max."""
-    ref = ct.models.MLModel(str(src_path), compute_units=ct.ComputeUnit.CPU_ONLY)
-    ane = ct.models.MLModel(str(out_path), compute_units=ct.ComputeUnit.ALL)
-    spec = ane.get_spec()
+def fp16_peak(spec, inputs):
+    """Largest absolute intermediate value, computed in fp32 on the CPU, so it works without a
+    Neural Engine. Returns (peak, number of intermediates checked)."""
     # Every computed value. Constants are skipped, and so are the "*_without_bias" conv outputs,
     # which Core ML won't expose as model outputs; their "+ bias" layer right after is watched.
     watched = [l.output[0] for l in spec.neuralNetwork.layers
                if l.WhichOneof("layer") != "loadConstantND"
                and l.output[0] != "activation_out" and not l.output[0].endswith("_without_bias")]
-    probe = ct.models.MLModel(with_outputs(spec, watched), compute_units=ct.ComputeUnit.CPU_ONLY)
+    probe_inputs = [img for name, img in inputs if name in PROBE_INPUTS]
+    assert len(probe_inputs) == len(PROBE_INPUTS), "a probe input is missing"
+    peak = 0.0
+    for b in range(PROBE_BATCHES):
+        names = watched[b::PROBE_BATCHES]
+        probe = ct.models.MLModel(with_outputs(spec, names), compute_units=ct.ComputeUnit.CPU_ONLY)
+        for img in probe_inputs:
+            out = probe.predict({"x_1": img})
+            peak = max(peak, max(float(np.abs(np.asarray(out[n])).max()) for n in names))
+            del out
+        del probe
+        print(f"  fp16 probe batch {b + 1}/{PROBE_BATCHES}: peak so far {peak:.4g}")
+    return peak, len(watched)
 
-    worst_psnr, peak = math.inf, 0.0
-    for name, img in verification_inputs():
+
+def verify(src_path, out_path):
+    """The rewritten model on the Neural Engine must match the original on the CPU, and every
+    watched intermediate value must stay far below the fp16 max."""
+    ref = ct.models.MLModel(str(src_path), compute_units=ct.ComputeUnit.CPU_ONLY)
+    ane = ct.models.MLModel(str(out_path), compute_units=ct.ComputeUnit.ALL)
+    inputs = verification_inputs()
+    worst_psnr = math.inf
+    for name, img in inputs:
         a = np.asarray(ref.predict({"x_1": img})["activation_out"].convert("RGB"), np.float64)
         b = np.asarray(ane.predict({"x_1": img})["activation_out"].convert("RGB"), np.float64)
         mse = np.mean((a - b) ** 2)
         psnr = math.inf if mse == 0 else 10 * math.log10(255 ** 2 / mse)
         worst_psnr = min(worst_psnr, psnr)
-        r = probe.predict({"x_1": img})
-        peak = max(peak, max(float(np.abs(np.asarray(r[n])).max()) for n in watched))
         print(f"  {name:20s} PSNR vs original-on-CPU {psnr:5.1f} dB")
-    print(f"worst PSNR {worst_psnr:.1f} dB (gate {MIN_PSNR_DB}); largest of {len(watched)} intermediates "
+    peak, watched = fp16_peak(ane.get_spec(), inputs)
+    print(f"worst PSNR {worst_psnr:.1f} dB (gate {MIN_PSNR_DB}); largest of {watched} intermediates "
           f"{peak:.4g} = fp16 headroom x{FP16_MAX / peak:.0f} (gate x{FP16_HEADROOM})")
     return worst_psnr >= MIN_PSNR_DB and peak < FP16_MAX / FP16_HEADROOM
 

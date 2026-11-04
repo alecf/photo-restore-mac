@@ -92,14 +92,14 @@ jobs:
 
       - name: Download original models
         if: steps.build.outcome == 'success'
-        run: uv run --with-requirements tools/models/requirements.txt python tools/models/download.py --strict
+        run: uv run --with-requirements tools/models/requirements.txt python -u tools/models/download.py --strict
 
       - name: Build GFPGAN-ANE.mlmodel
         if: steps.build.outcome == 'success'
         # GitHub's macOS runners are VMs without a Neural Engine, so the script's PSNR gate runs on
         # CPU/GPU here. Its fp16 probe of every intermediate value is what catches an overflow
         # in CI; real Neural Engine output is only checked locally, by FaceRestorerIntegrationTests.
-        run: uv run --with-requirements tools/models/requirements.txt python tools/models/rewrite_gfpgan_ane.py
+        run: uv run --with-requirements tools/models/requirements.txt python -u tools/models/rewrite_gfpgan_ane.py
 
       - name: Check built files against pins
         if: steps.build.outcome == 'success'
