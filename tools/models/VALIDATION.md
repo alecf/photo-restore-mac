@@ -43,4 +43,32 @@ uv run --with gdown python tools/models/download.py
     ../photo-restore/inputs/77ishIMG_1210.jpeg /tmp/pr-ref
 uv run --with coremltools,pillow,numpy,scikit-image python tools/models/validate.py
 ```
-Models live (gitignored) in `tools/models/cache/`; they'll be re-hosted with pinned SHA-256s in U3.
+Models live (gitignored) in `tools/models/cache/`; they're re-hosted with pinned SHA-256s on the
+`models-v2` GitHub release (see `HOSTING.md`).
+
+## GFPGAN on the Neural Engine (2026-11-04)
+
+The adopted `GFPGAN.mlmodel` returns a flat brown square on the Neural Engine (macOS 27). Its
+StyleGAN2 weight-demodulation sums reach ~2.6e6, past the fp16 maximum of 65504, so they become
+inf and the decoder's activations collapse to 0. Its 23 modulated/to-RGB convs also build their
+weights at runtime, which the Neural Engine can't run, so they fell back to the CPU.
+
+`rewrite_gfpgan_ane.py` rewrites those convs into the equivalent non-fused form with constant
+weights and power-of-two scale factors that cancel exactly, then stores the weights as fp16. The
+result, `GFPGAN-ANE.mlmodel` (174 MB, deterministic SHA-256), has every layer placed on the
+Neural Engine and runs at ~45 ms per face (vs ~1 s on the GPU for the original).
+
+| Rewritten model, vs original on CPU | Worst PSNR (26 held-out inputs) |
+|---|---|
+| Neural Engine (`.all`) | 55.5 dB |
+| GPU (`.cpuAndGPU`) | 54.8 dB |
+| CPU | 58.8 dB |
+
+Held-out inputs: whole photos and crops from five public-domain portraits, the test fixture, and
+synthetic black/white/gray/red/noise images. The largest intermediate value is ~1.2e3, 54× below
+the fp16 maximum. The script re-runs a shorter version of this check every time it builds.
+
+```
+uv run --python 3.12 --with coremltools --with numpy --with pillow \
+    python tools/models/rewrite_gfpgan_ane.py
+```

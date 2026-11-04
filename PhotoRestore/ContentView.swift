@@ -25,8 +25,8 @@ struct ContentView: View {
     }
 }
 
-/// Shown until the Core ML models are installed. Offers local side-load (used until the hosted
-/// download is wired); the registry's SHA-256s guard integrity.
+/// Shown until the Core ML models are installed: download them (the default), or side-load
+/// them from a folder for offline use. The registry's SHA-256s guard integrity either way.
 struct SetupView: View {
     @ObservedObject var model: AppModel
     @State private var importing = false
@@ -36,19 +36,25 @@ struct SetupView: View {
             Image(systemName: "wand.and.stars")
                 .font(.system(size: 56, weight: .thin)).foregroundStyle(.secondary)
             Text("One-time setup").font(.title2.weight(.semibold))
-            Text("Photo Restore needs its restoration models (~460 MB).")
+            Text("Photo Restore needs its restoration models (\(model.modelDownloadSize)).")
                 .foregroundStyle(.secondary)
             if model.isPreparing {
-                ProgressView().controlSize(.small)
+                if let progress = model.downloadProgress {
+                    ProgressView(value: progress).frame(maxWidth: 320)
+                } else {
+                    ProgressView().controlSize(.small)
+                }
                 Text(model.setupMessage ?? "Installing…").font(.callout).foregroundStyle(.secondary)
             } else {
-                Button("Install from Folder…") { pickFolder() }
+                Button("Download Models") { Task { await model.downloadModels() } }
                     .controlSize(.large)
+                    .buttonStyle(.borderedProminent)
+                Button("Install from Folder…") { pickFolder() }
                 if let msg = model.setupMessage {
                     Text(msg).font(.callout).foregroundStyle(.red).multilineTextAlignment(.center)
                         .frame(maxWidth: 420)
                 }
-                Text("Choose a folder containing RealESRGAN4x.mlmodel, GFPGAN.mlmodel and FaceParsing.mlmodel.")
+                Text("Offline? Install from a folder containing \(ModelRegistry.fileNamesList).")
                     .font(.caption).foregroundStyle(.tertiary).multilineTextAlignment(.center).frame(maxWidth: 420)
             }
         }

@@ -145,6 +145,12 @@ public actor ModelStore {
         // Resume: if a partial file exists, continue from its byte offset via a Range request.
         let existing = (try? fileManager.attributesOfItem(atPath: dest.path)[.size] as? Int) ?? nil
         let resumeFrom = existing ?? 0
+        // Already fully downloaded (e.g. the app quit before verifying): a Range request past the
+        // end would get HTTP 416. Hand it to verify(), which deletes it if it's bad.
+        if resumeFrom >= spec.sizeBytes {
+            onProgress?(1.0)
+            return dest
+        }
         let remote = ModelRegistry.remoteURL(for: spec)
 
         var request = URLRequest(url: remote)

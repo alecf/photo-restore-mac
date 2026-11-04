@@ -26,7 +26,7 @@ final class RestorePipelineIntegrationTests: XCTestCase {
 
     func testFullConservativePipelineOnSample() async throws {
         guard let esrgan = cache("RealESRGAN4x.mlmodel"),
-              let gfpgan = cache("GFPGAN.mlmodel"),
+              let gfpgan = cache(ModelRegistry.gfpgan.fileName),
               let parse = cache("FaceParsing.mlmodel") else {
             throw XCTSkip("models not present in tools/models/cache — run tools/models/download.py")
         }

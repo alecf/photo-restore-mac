@@ -21,6 +21,7 @@ final class AppModel: ObservableObject {
     @Published var modelsReady = false
     @Published var setupMessage: String?
     @Published var isPreparing = false
+    @Published var downloadProgress: Double?   // 0...1 while downloading models
 
     // Queue + selection
     @Published var items: [UIItem] = []
@@ -65,6 +66,23 @@ final class AppModel: ObservableObject {
         if modelsReady { await buildEngineIfNeeded() }
     }
 
+    /// Total model download size for display, e.g. "294 MB".
+    var modelDownloadSize: String {
+        ByteCountFormatter.string(fromByteCount: Int64(ModelRegistry.totalBytes), countStyle: .file)
+    }
+
+    func downloadModels() async {
+        isPreparing = true; setupMessage = "Downloading models…"; downloadProgress = 0
+        defer { isPreparing = false; downloadProgress = nil }
+        do {
+            try await store.ensureAll { fraction in
+                Task { @MainActor [weak self] in self?.downloadProgress = fraction }
+            }
+            setupMessage = nil
+            await refreshReadiness()
+        } catch { setupMessage = "\(error)" }
+    }
+
     func importModels(from directory: URL) async {
         isPreparing = true; setupMessage = "Installing models…"
         defer { isPreparing = false }
@@ -73,7 +91,7 @@ final class AppModel: ObservableObject {
             if Set(ready).isSuperset(of: ModelRegistry.all.map(\.name)) {
                 setupMessage = nil; await refreshReadiness()
             } else {
-                setupMessage = "Folder is missing some model files (need RealESRGAN4x.mlmodel, GFPGAN.mlmodel, FaceParsing.mlmodel)."
+                setupMessage = "Folder is missing some model files (need \(ModelRegistry.fileNamesList))."
             }
         } catch { setupMessage = "Couldn't install models: \(error)" }
     }

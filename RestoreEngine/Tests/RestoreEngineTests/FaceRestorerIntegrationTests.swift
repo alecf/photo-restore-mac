@@ -2,10 +2,12 @@ import XCTest
 import CoreML
 @testable import RestoreEngine
 
-/// Guards the raw GFPGAN output, before any color match, blend, grain or paste-back can
-/// hide a broken model. On the Neural Engine this GFPGAN build returns a near-uniform
-/// brown square instead of a face, so faces came out flat and gray in the app while the
-/// full-pipeline SSIM gate still passed. Guarded: needs GFPGAN.mlmodel in tools/models/cache.
+/// Guards the raw GFPGAN output, before any color match, blend, grain or paste-back can hide a
+/// broken model. The original GFPGAN build overflows fp16 on the Neural Engine and returns a
+/// near-uniform brown square, while the full-pipeline SSIM gate still passed. The shipped model
+/// is rewritten to avoid that, and the production restorer runs it on the Neural Engine
+/// (`.all`), so this checks the real configuration.
+/// Guarded: needs GFPGAN-ANE.mlmodel in tools/models/cache (tools/models/rewrite_gfpgan_ane.py).
 final class FaceRestorerIntegrationTests: XCTestCase {
 
     private func repoRoot() -> URL {
@@ -15,9 +17,9 @@ final class FaceRestorerIntegrationTests: XCTestCase {
     }
 
     func testRestoredFaceKeepsTheFace() async throws {
-        let gfpgan = repoRoot().appendingPathComponent("tools/models/cache/GFPGAN.mlmodel")
+        let gfpgan = repoRoot().appendingPathComponent("tools/models/cache/\(ModelRegistry.gfpgan.fileName)")
         guard FileManager.default.fileExists(atPath: gfpgan.path) else {
-            throw XCTSkip("GFPGAN.mlmodel not present in tools/models/cache — run tools/models/download.py")
+            throw XCTSkip("\(ModelRegistry.gfpgan.fileName) not in tools/models/cache — run tools/models/rewrite_gfpgan_ane.py")
         }
         let restorer = try CoreMLFaceRestorer(compiledModelURL: try await MLModel.compileModel(at: gfpgan))
 

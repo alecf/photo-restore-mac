@@ -15,7 +15,7 @@ final class ModelRegistryTests: XCTestCase {
         defer { ModelRegistry.baseURL = original }
         ModelRegistry.baseURL = URL(string: "https://example.com/models/v1/")!
         let url = ModelRegistry.remoteURL(for: ModelRegistry.gfpgan)
-        XCTAssertEqual(url.absoluteString, "https://example.com/models/v1/GFPGAN.mlmodel")
+        XCTAssertEqual(url.absoluteString, "https://example.com/models/v1/GFPGAN-ANE.mlmodel")
     }
 }
 
@@ -56,6 +56,29 @@ final class ModelStoreTests: XCTestCase {
                              sizeBytes: payload.count, version: "1")
         try await store.verify(file, spec: spec)   // must not throw
         XCTAssertTrue(FileManager.default.fileExists(atPath: file.path))
+    }
+
+    /// A raw file already at full size (the app quit after downloading, before verifying) must
+    /// go straight to verify + compile. A Range request past its end would get HTTP 416.
+    func testFullyDownloadedFileSkipsTheNetwork() async throws {
+        let root = try makeTempRoot()
+        let store = ModelStore(root: root)
+        let payload = Data("not really a model".utf8)
+        let spec = ModelSpec(name: "t", fileName: "t.mlmodel", sha256: sha256(of: payload),
+                             sizeBytes: payload.count, version: "1")
+        let raw = root.appendingPathComponent("raw", isDirectory: true)
+        try FileManager.default.createDirectory(at: raw, withIntermediateDirectories: true)
+        try payload.write(to: raw.appendingPathComponent(spec.fileName))
+
+        let original = ModelRegistry.baseURL
+        defer { ModelRegistry.baseURL = original }
+        ModelRegistry.baseURL = URL(string: "https://unreachable.invalid/")!
+        do {
+            _ = try await store.compiledModel(for: spec)
+            XCTFail("expected the compile step to reject the fake model")
+        } catch ModelStore.ModelError.compileFailed {
+            // Verified and handed to the compiler without touching the network.
+        }
     }
 
     func testVerifyFailsAndDeletesOnMismatch() async throws {
