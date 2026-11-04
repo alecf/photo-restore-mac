@@ -157,11 +157,6 @@
       box-shadow: 0 1px 0 var(--rule), 0 12px 30px -20px rgba(20, 30, 28, .5);
     }
     .shots figcaption { margin-top: .75rem; font-size: .95rem; color: var(--ink-soft); max-width: 44rem; }
-    .note {
-      max-width: 44rem; margin: 2.25rem 0 0; padding: 1rem 1.25rem;
-      border-left: 3px solid var(--accent); background: var(--mat-deep);
-    }
-    .note p { margin: 0; }
     .credits { margin: 1.25rem 0 0; font-size: .85rem; color: var(--ink-soft); max-width: 44rem; }
 
     footer { border-top: 1px solid var(--rule); padding: 2rem 0 3rem; font-size: .9rem; color: var(--ink-soft); }
@@ -209,8 +204,7 @@
           <figure class="wide">
             <img src="screenshots/restore-portrait.png" width="1600" height="1000"
               alt="Photo Restore showing a 1927 sepia portrait, split by a slider into the original on the left and the restored version on the right.">
-            <figcaption>Drag the slider to compare the original scan with the restored photo.
-              Faces that fill a good part of the frame get the full face restoration.</figcaption>
+            <figcaption>Drag the slider to compare the original scan with the restored photo.</figcaption>
           </figure>
           <figure>
             <img src="screenshots/batch-settings.png" width="1600" height="1000" loading="lazy"
@@ -218,17 +212,10 @@
             <figcaption>Queue a folder, then pick the output size and face settings before you start.</figcaption>
           </figure>
           <figure>
-            <img src="screenshots/restore-group-faces-off.png" width="1600" height="1000" loading="lazy"
-              alt="A 1925 family group portrait, original on the left and restored on the right, with face restoration switched off.">
-            <figcaption>A group photo restored with face restoration off: contrast and detail, no
-              face changes.</figcaption>
+            <img src="screenshots/restore-group.png" width="1600" height="1000" loading="lazy"
+              alt="A 1925 family portrait of eight people, original on the left and restored on the right, with every face restored.">
+            <figcaption>Group photos work too: every face is found and restored on its own.</figcaption>
           </figure>
-        </div>
-        <div class="note">
-          <p><strong>Known limitation: small faces.</strong> Face restoration currently struggles
-            with small faces, such as everyone in a group photo, and can leave them flat, gray and
-            featureless. For group shots, switch <strong>Restore faces</strong> off in the settings
-            panel. You still get the contrast fix and upscaling.</p>
         </div>
         <p class="credits">Sample photos are public domain or have no known copyright restrictions,
           via <a href="https://commons.wikimedia.org/">Wikimedia Commons</a>: Virginia Woolf (1927),
@@ -342,8 +329,6 @@
               the intensity slider to keep more of the original texture, turn on "Skip already-sharp
               faces", or switch face restoration off entirely. The before/after slider makes it easy
               to check each result.</p>
-            <p>Small faces, like those in a group photo, don't restore well yet and can come out flat
-              and gray. Switch face restoration off for those photos.</p>
           </div>
         </details>
 
