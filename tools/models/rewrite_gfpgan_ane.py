@@ -34,7 +34,10 @@ PSNR on the default compute units, plus an fp32 probe that every intermediate va
 below the fp16 maximum. On a machine without a Neural Engine (e.g. GitHub's macOS VMs) the PSNR
 check runs on CPU/GPU, so the fp16 probe is what guards against Neural Engine overflow there;
 RestoreEngine's FaceRestorerIntegrationTests checks real Neural Engine output.
-The output is deterministic: the same input gives the same bytes.
+The output is deterministic: the same input gives the same bytes on any platform.
+
+Building needs no Core ML, so `--no-verify` runs anywhere, including Linux. Verifying and
+`--calibrate` run the model, so they need macOS.
 """
 from __future__ import annotations
 
@@ -276,6 +279,10 @@ def main() -> int:
     ap.add_argument("--calibrate", action="store_true",
                     help=f"recompute the per-layer scales from the calibration faces and rewrite {SCALES.name}")
     args = ap.parse_args()
+    if sys.platform != "darwin" and (args.calibrate or not args.no_verify):
+        print("verifying and --calibrate run the model, which needs macOS: use --no-verify to only build",
+              file=sys.stderr)
+        return 1
     if not CALIBRATION:
         print("no calibration images in tools/models/calibration/", file=sys.stderr)
         return 1

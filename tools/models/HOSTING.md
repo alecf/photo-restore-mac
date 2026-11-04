@@ -18,23 +18,27 @@ SHA-256s are pinned in `RestoreEngine/Sources/RestoreEngine/Models/ModelRegistry
 
 ## Publishing
 
-The **Models** workflow (`.github/workflows/models.yml`) builds and publishes the release on a
-GitHub macOS runner; nothing is uploaded from a developer machine. It reads the tag, file names
-and SHA-256s from `ModelRegistry.swift`, then:
+The **Models** workflow (`.github/workflows/models.yml`) builds and publishes the release;
+nothing is uploaded from a developer machine. It reads the tag, file names and SHA-256s from
+`ModelRegistry.swift`. Its `build` job runs on Linux, because the build only edits a protobuf and
+gives byte-identical output on any platform:
 
 1. downloads the originals (`download.py --strict`, cached between runs),
-2. builds `GFPGAN-ANE.mlmodel` (`rewrite_gfpgan_ane.py`, Python packages pinned in
+2. builds `GFPGAN-ANE.mlmodel` (`rewrite_gfpgan_ane.py --no-verify`, Python packages pinned in
    `requirements.txt` so the bytes are reproducible),
 3. checks every file against the pins (`check_pins.py`),
 4. on `main` only, creates the release (marked not-latest, so the app's own releases stay
-   latest) with the models, `MODEL_LICENSES.md` and GFPGAN's license, then downloads the
-   published assets and checks them again.
+   latest) with the models, `MODEL_LICENSES.md` and GFPGAN's license, then checks the published
+   assets' digests against the pins.
 
-It only runs when model tooling, `ModelRegistry.swift` or the workflow changes. On pull requests it
-always runs steps 1–3, so tooling changes are proven to reproduce the pinned bytes. On `main`, if
-the release already exists, it only checks the release's asset digests against the pins (no
-rebuild, no download). Published releases are never modified: see AGENTS.md for how to ship a
-changed model.
+It only runs when model tooling, `ModelRegistry.swift` or the workflow changes. On pull requests
+`build` always runs steps 1–3, so tooling changes are proven to reproduce the pinned bytes. On
+`main`, if the release already exists, it only checks the release's asset digests (no rebuild, no
+download). Published releases are never modified: see AGENTS.md for how to ship a changed model.
+
+On pull requests a `verify` job also runs on macOS, because the PSNR and fp16 headroom checks run
+the model with Core ML. `main` doesn't repeat it: bytes that match the pins are the bytes verified
+on the PR. It isn't a required check, so wait for it before merging a model change.
 
 To reproduce the build locally:
 
