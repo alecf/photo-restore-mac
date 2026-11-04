@@ -4,13 +4,21 @@ name: Models
 # The release tag, file names, sizes and SHA-256s all come from ModelRegistry.swift.
 # Only runs when model tooling, the registry, or this file changes (see `paths`).
 #
-# - Pull requests: always rebuild the models and check them against the pins, so a change to
-#   the tooling is proven to still produce exactly the bytes the app expects. If the release
-#   already exists, also check it still matches the pins. Nothing is published.
+# build (Linux): the build only edits a protobuf, so it needs no Core ML and doesn't wait for a
+#   scarce macOS runner. Its output is byte-identical to a macOS build.
+# - Pull requests: always rebuild and check against the pins, so a change to the tooling is
+#   proven to still produce exactly the bytes the app expects. If the release already exists,
+#   also check it still matches the pins. Nothing is published.
 # - main / manual: if the release exists, only check it against the pins (no rebuild).
 #   Otherwise build, check, publish, and check the published assets.
 # A model change that keeps the old tag fails the release check: published releases are
-# never modified. See tools/models/HOSTING.md and AGENTS.md.
+# never modified.
+#
+# verify (macOS, pull requests only): runs the model with Core ML to check PSNR and fp16 headroom.
+# main doesn't repeat this: bytes that match the pins are the bytes verified on the PR.
+# It isn't a required check, so wait for it before merging a model change.
+#
+# See tools/models/HOSTING.md and AGENTS.md.
 on:
   pull_request:
     branches: [main]
@@ -40,9 +48,9 @@ env:
   UV_PYTHON: "3.12"
 
 jobs:
-  models:
-    runs-on: macos-15
-    timeout-minutes: 45
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -80,7 +88,7 @@ jobs:
           fi
 
       - name: Cache original models
-        id: build
+        id: cache
         if: github.event_name == 'pull_request' || steps.pins.outputs.exists == 'false'
         uses: actions/cache@v4
         with:
@@ -88,21 +96,18 @@ jobs:
             tools/models/cache/RealESRGAN4x.mlmodel
             tools/models/cache/GFPGAN.mlmodel
             tools/models/cache/FaceParsing.mlmodel
-          key: models-src-${{ hashFiles('tools/models/manifest.json') }}
+          key: models-src-${{ runner.os }}-${{ hashFiles('tools/models/manifest.json') }}
 
       - name: Download original models
-        if: steps.build.outcome == 'success'
+        if: steps.cache.outcome == 'success'
         run: uv run --with-requirements tools/models/requirements.txt python -u tools/models/download.py --strict
 
       - name: Build GFPGAN-ANE.mlmodel
-        if: steps.build.outcome == 'success'
-        # GitHub's macOS runners are VMs without a Neural Engine, so the script's PSNR gate runs on
-        # CPU/GPU here. Its fp16 probe of every intermediate value is what catches an overflow
-        # in CI; real Neural Engine output is only checked locally, by FaceRestorerIntegrationTests.
-        run: uv run --with-requirements tools/models/requirements.txt python -u tools/models/rewrite_gfpgan_ane.py
+        if: steps.cache.outcome == 'success'
+        run: uv run --with-requirements tools/models/requirements.txt python -u tools/models/rewrite_gfpgan_ane.py --no-verify
 
       - name: Check built files against pins
-        if: steps.build.outcome == 'success'
+        if: steps.cache.outcome == 'success'
         run: |
           if ! python3 tools/models/check_pins.py tools/models/cache; then
             echo "::error::The built models don't match ModelRegistry.swift. If the change is intended, update the pins (and the release tag and version). See AGENTS.md."
@@ -135,3 +140,30 @@ jobs:
           gh api "repos/${{ github.repository }}/releases/tags/${{ steps.pins.outputs.tag }}" \
               --jq '.assets[] | "\(.name) \(.size) \(.digest)"' \
             | python3 tools/models/check_pins.py --assets
+
+  verify:
+    if: github.event_name == 'pull_request'
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Cache original models
+        uses: actions/cache@v4
+        with:
+          path: |
+            tools/models/cache/RealESRGAN4x.mlmodel
+            tools/models/cache/GFPGAN.mlmodel
+            tools/models/cache/FaceParsing.mlmodel
+          key: models-src-${{ runner.os }}-${{ hashFiles('tools/models/manifest.json') }}
+
+      - name: Download original models
+        run: uv run --with-requirements tools/models/requirements.txt python -u tools/models/download.py --strict
+
+      - name: Build and verify GFPGAN-ANE.mlmodel
+        # GitHub's macOS runners are VMs without a Neural Engine, so the script's PSNR gate runs on
+        # CPU/GPU here. Its fp16 probe of every intermediate value is what catches an overflow
+        # in CI; real Neural Engine output is only checked locally, by FaceRestorerIntegrationTests.
+        run: uv run --with-requirements tools/models/requirements.txt python -u tools/models/rewrite_gfpgan_ane.py

@@ -34,7 +34,7 @@ release and on any push to `site/**`.
 
 The app downloads its Core ML models from a GitHub release (`ModelRegistry.baseURL`, currently
 `models-v2`). `ModelRegistry.swift` is the source of truth: release tag, file names, sizes and
-SHA-256s. The **Models** workflow (`.github/workflows/models.yml`) builds the files on a macOS
+SHA-256s. The **Models** workflow (`.github/workflows/models.yml`) builds the files on a Linux
 runner and publishes the release. Never build or upload model files from a local machine for a
 release.
 
@@ -57,7 +57,10 @@ For these, in the same PR:
 4. Update the docs that state model names or sizes: README, `tools/models/HOSTING.md`,
    `MODEL_LICENSES.md`, and the landing page (see above).
 
-CI has no Neural Engine, so before merging a rewrite change, run `swift test --filter
+Wait for the PR's `verify` job before merging: it's the only CI check of the rewritten model's
+quality, it isn't a required check, and publishing on `main` doesn't repeat it.
+
+CI has no Neural Engine, so before merging a rewrite change, also run `swift test --filter
 FaceRestorerIntegrationTests` in `RestoreEngine/` on Apple Silicon with the new model in
 `tools/models/cache/`.
 
