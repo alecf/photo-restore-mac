@@ -30,8 +30,11 @@ and SHA-256s from `ModelRegistry.swift`, then:
    latest) with the models, `MODEL_LICENSES.md` and GFPGAN's license, then downloads the
    published assets and checks them again.
 
-On pull requests it runs steps 1–3 only. If the release already exists, it checks the published
-assets against the pins instead of building.
+It only runs when model tooling, `ModelRegistry.swift` or the workflow changes. On pull requests it
+always runs steps 1–3, so tooling changes are proven to reproduce the pinned bytes. On `main`, if
+the release already exists, it only checks the release's asset digests against the pins (no
+rebuild, no download). Published releases are never modified: see AGENTS.md for how to ship a
+changed model.
 
 To reproduce the build locally:
 

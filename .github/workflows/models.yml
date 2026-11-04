@@ -2,13 +2,15 @@ name: Models
 
 # Builds the Core ML model files the app downloads and publishes them as a GitHub release.
 # The release tag, file names, sizes and SHA-256s all come from ModelRegistry.swift.
+# Only runs when model tooling, the registry, or this file changes (see `paths`).
 #
-# - Pull requests: build the models and check them against the pins (proves CI reproduces
-#   exactly the bytes the app expects). Nothing is published.
-# - main / manual: same, then create the release if it doesn't exist yet.
-# - If the release already exists, its assets are downloaded and checked against the pins
-#   instead, so changing a model without bumping the tag fails loudly.
-# See tools/models/HOSTING.md.
+# - Pull requests: always rebuild the models and check them against the pins, so a change to
+#   the tooling is proven to still produce exactly the bytes the app expects. If the release
+#   already exists, also check it still matches the pins. Nothing is published.
+# - main / manual: if the release exists, only check it against the pins (no rebuild).
+#   Otherwise build, check, publish, and check the published assets.
+# A model change that keeps the old tag fails the release check: published releases are
+# never modified. See tools/models/HOSTING.md and AGENTS.md.
 on:
   pull_request:
     branches: [main]
@@ -27,9 +29,11 @@ on:
 permissions:
   contents: write
 
+# One run per PR (a new push cancels the stale run) or per branch. Runs on main are never
+# cancelled: one may be publishing.
 concurrency:
-  group: models-${{ github.ref }}
-  cancel-in-progress: false
+  group: models-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -38,6 +42,7 @@ env:
 jobs:
   models:
     runs-on: macos-15
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
@@ -51,24 +56,27 @@ jobs:
           echo "files=$(python3 tools/models/check_pins.py --files)" >> "$GITHUB_OUTPUT"
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
-            echo "Release $TAG already exists: checking its assets."
+            echo "Release $TAG exists."
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
-            echo "Release $TAG does not exist yet: building."
+            echo "Release $TAG does not exist yet."
           fi
 
-      - name: Check published assets against pins
+      - name: Check published release against pins
         if: steps.pins.outputs.exists == 'true'
+        # Uses the SHA-256 digests GitHub records for release assets: no download needed.
         run: |
-          mkdir -p published
-          gh release download "${{ steps.pins.outputs.tag }}" --dir published --pattern '*.mlmodel'
-          if ! python3 tools/models/check_pins.py published; then
-            echo "::error::Release ${{ steps.pins.outputs.tag }} doesn't match ModelRegistry.swift. To ship a changed model, point baseURL at a new tag (e.g. models-v3) and bump the model's version."
+          TAG="${{ steps.pins.outputs.tag }}"
+          if ! gh api "repos/${{ github.repository }}/releases/tags/$TAG" \
+                --jq '.assets[] | "\(.name) \(.size) \(.digest)"' \
+              | python3 tools/models/check_pins.py --assets; then
+            echo "::error::Release $TAG doesn't match ModelRegistry.swift. Published releases are never modified: to ship a changed model, point baseURL at a new tag (e.g. models-v3) and bump that model's version. See AGENTS.md."
             exit 1
           fi
 
       - name: Cache original models
-        if: steps.pins.outputs.exists == 'false'
+        id: build
+        if: github.event_name == 'pull_request' || steps.pins.outputs.exists == 'false'
         uses: actions/cache@v4
         with:
           path: |
@@ -78,21 +86,25 @@ jobs:
           key: models-src-${{ hashFiles('tools/models/manifest.json') }}
 
       - name: Download original models
-        if: steps.pins.outputs.exists == 'false'
+        if: steps.build.outcome == 'success'
         run: uv run --with-requirements tools/models/requirements.txt python tools/models/download.py --strict
 
       - name: Build GFPGAN-ANE.mlmodel
-        if: steps.pins.outputs.exists == 'false'
+        if: steps.build.outcome == 'success'
         # Verifies the rewrite against the original on the CPU. (GitHub's macOS runners are
         # VMs without a Neural Engine, so `.all` runs on CPU/GPU here; the 54+ dB gate holds there too.)
         run: uv run --with-requirements tools/models/requirements.txt python tools/models/rewrite_gfpgan_ane.py
 
       - name: Check built files against pins
-        if: steps.pins.outputs.exists == 'false'
-        run: python3 tools/models/check_pins.py tools/models/cache
+        if: steps.build.outcome == 'success'
+        run: |
+          if ! python3 tools/models/check_pins.py tools/models/cache; then
+            echo "::error::The built models don't match ModelRegistry.swift. If the change is intended, update the pins (and the release tag and version). See AGENTS.md."
+            exit 1
+          fi
 
       - name: Publish release
-        if: steps.pins.outputs.exists == 'false' && github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && steps.pins.outputs.exists == 'false'
         run: |
           TAG="${{ steps.pins.outputs.tag }}"
           curl -fsSL https://raw.githubusercontent.com/TencentARC/GFPGAN/master/LICENSE \
@@ -112,11 +124,8 @@ jobs:
             "${FILES[@]}" tools/models/MODEL_LICENSES.md tools/models/cache/GFPGAN-LICENSE.txt
 
       - name: Check published release
-        if: steps.pins.outputs.exists == 'false' && github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && steps.pins.outputs.exists == 'false'
         run: |
-          mkdir -p published
-          for f in ${{ steps.pins.outputs.files }}; do
-            curl -fsSL -o "published/$f" \
-              "${{ github.server_url }}/${{ github.repository }}/releases/download/${{ steps.pins.outputs.tag }}/$f"
-          done
-          python3 tools/models/check_pins.py published
+          gh api "repos/${{ github.repository }}/releases/tags/${{ steps.pins.outputs.tag }}" \
+              --jq '.assets[] | "\(.name) \(.size) \(.digest)"' \
+            | python3 tools/models/check_pins.py --assets
