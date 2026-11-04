@@ -69,6 +69,6 @@ synthetic black/white/gray/red/noise images. The largest intermediate value is ~
 the fp16 maximum. The script re-runs a shorter version of this check every time it builds.
 
 ```
-uv run --python 3.12 --with coremltools --with numpy --with pillow \
+uv run --python 3.12 --with-requirements tools/models/requirements.txt \
     python tools/models/rewrite_gfpgan_ane.py
 ```

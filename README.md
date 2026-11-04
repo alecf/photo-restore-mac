@@ -46,7 +46,7 @@ Each file is SHA-256-verified, compiled to `.mlmodelc`, and cached in Applicatio
 `GFPGAN-ANE.mlmodel` is the upstream GFPGAN Core ML model rewritten by
 `tools/models/rewrite_gfpgan_ane.py` so it runs on the Neural Engine (~45 ms per face, about 20×
 faster than the GPU). The original build overflows 16-bit floats there and outputs a flat square.
-To rebuild it: run `tools/models/download.py`, then the rewrite script (see its docstring).
+The `Models` GitHub Actions workflow builds and publishes these files; see `tools/models/HOSTING.md`.
 
 ## Distribution
 

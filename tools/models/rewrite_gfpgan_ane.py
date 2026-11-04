@@ -24,7 +24,7 @@ output matches the original model on CPU at >50 dB PSNR. Weights are stored as f
 download; the Neural Engine computes in fp16 anyway), which costs no measurable accuracy.
 
 Run (needs the original model, from download.py):
-    uv run --python 3.12 --with coremltools --with numpy --with pillow \
+    uv run --python 3.12 --with-requirements tools/models/requirements.txt \
         python tools/models/rewrite_gfpgan_ane.py
 
 Writes tools/models/cache/GFPGAN-ANE.mlmodel, then verifies it on the Neural Engine against

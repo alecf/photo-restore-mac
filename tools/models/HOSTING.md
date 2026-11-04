@@ -18,28 +18,33 @@ SHA-256s are pinned in `RestoreEngine/Sources/RestoreEngine/Models/ModelRegistry
 
 ## Publishing
 
-```
-uv run --with gdown python tools/models/download.py
-uv run --python 3.12 --with coremltools --with numpy --with pillow \
-    python tools/models/rewrite_gfpgan_ane.py
-shasum -a 256 tools/models/cache/*.mlmodel     # must match ModelRegistry.swift
-curl -fsSL https://raw.githubusercontent.com/TencentARC/GFPGAN/master/LICENSE \
-    -o tools/models/cache/GFPGAN-LICENSE.txt      # Apache-2.0 asks for a copy of the license
-gh release create models-v2 --latest=false --title "Models v2" --notes-file <notes> \
-    tools/models/cache/RealESRGAN4x.mlmodel \
-    tools/models/cache/GFPGAN-ANE.mlmodel \
-    tools/models/cache/FaceParsing.mlmodel \
-    tools/models/MODEL_LICENSES.md \
-    tools/models/cache/GFPGAN-LICENSE.txt
-```
+The **Models** workflow (`.github/workflows/models.yml`) builds and publishes the release on a
+GitHub macOS runner; nothing is uploaded from a developer machine. It reads the tag, file names
+and SHA-256s from `ModelRegistry.swift`, then:
 
-`--latest=false` keeps the app's own releases marked as latest. Upload the files exactly as built;
-the app rejects any file whose SHA-256 doesn't match.
+1. downloads the originals (`download.py --strict`, cached between runs),
+2. builds `GFPGAN-ANE.mlmodel` (`rewrite_gfpgan_ane.py`, Python packages pinned in
+   `requirements.txt` so the bytes are reproducible),
+3. checks every file against the pins (`check_pins.py`),
+4. on `main` only, creates the release (marked not-latest, so the app's own releases stay
+   latest) with the models, `MODEL_LICENSES.md` and GFPGAN's license, then downloads the
+   published assets and checks them again.
+
+On pull requests it runs steps 1–3 only. If the release already exists, it checks the published
+assets against the pins instead of building.
+
+To reproduce the build locally:
+
+```
+uv run --python 3.12 --with-requirements tools/models/requirements.txt python tools/models/download.py
+uv run --python 3.12 --with-requirements tools/models/requirements.txt python tools/models/rewrite_gfpgan_ane.py
+python3 tools/models/check_pins.py
+```
 
 ## Changing a model
 
-Upload under a new release tag (`models-v3`), point `baseURL` at it, and bump the changed model's
-`version` in `ModelRegistry`. The compiled cache is keyed by version, so existing installs fetch
+Point `baseURL` at a new release tag (`models-v3`), update the changed model's pins, and bump its
+`version` in `ModelRegistry`. Merging that to `main` makes the workflow publish the new release. The compiled cache is keyed by version, so existing installs fetch
 and compile the new file. Old releases can stay up for older app versions.
 
 ## Checking the URLs

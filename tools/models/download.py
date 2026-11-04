@@ -4,6 +4,7 @@ Google Drive (handling the large-file confirmation interstitial via gdown), veri
 their size, and record SHA-256 back into the manifest.
 
 Run with uv:  uv run --with gdown python tools/models/download.py
+With --strict (CI), a SHA-256 that differs from the manifest is an error instead of an update.
 """
 from __future__ import annotations
 
@@ -28,6 +29,7 @@ def sha256(path: Path) -> str:
 
 
 def main() -> int:
+    strict = "--strict" in sys.argv[1:]
     CACHE.mkdir(parents=True, exist_ok=True)
     manifest = json.loads(MANIFEST.read_text())
     changed = False
@@ -47,6 +49,9 @@ def main() -> int:
                 return 1
 
         digest = sha256(dest)
+        if strict and model.get("sha256") != digest:
+            print(f"  ERROR: {model['name']} sha256 {digest} != manifest {model.get('sha256')}")
+            return 1
         if model.get("sha256") != digest:
             model["sha256"] = digest
             changed = True
