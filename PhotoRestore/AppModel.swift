@@ -21,6 +21,7 @@ final class AppModel: ObservableObject {
     @Published var modelsReady = false
     @Published var setupMessage: String?
     @Published var isPreparing = false
+    @Published var downloadProgress: Double?   // 0...1 while downloading models
 
     // Queue + selection
     @Published var items: [UIItem] = []
@@ -62,18 +63,43 @@ final class AppModel: ObservableObject {
 
     func refreshReadiness() async {
         modelsReady = await store.isReady()
-        if modelsReady { await buildEngineIfNeeded() }
+        if modelsReady {
+            await store.removeStaleModels()   // e.g. the previous version after a model update
+            await buildEngineIfNeeded()
+        }
+    }
+
+    /// Total model download size for display, e.g. "294 MB".
+    var modelDownloadSize: String {
+        ByteCountFormatter.string(fromByteCount: Int64(ModelRegistry.totalBytes), countStyle: .file)
+    }
+
+    func downloadModels() async {
+        isPreparing = true; setupMessage = "Downloading models…"; downloadProgress = 0
+        defer { isPreparing = false; downloadProgress = nil }
+        do {
+            try await store.ensureAll { fraction in
+                // These hops can land out of order or after the download ends: only ever move
+                // forward, and leave a finished download's cleared progress alone.
+                Task { @MainActor [weak self] in
+                    guard let self, let current = self.downloadProgress, fraction > current else { return }
+                    self.downloadProgress = fraction
+                }
+            }
+            setupMessage = nil
+            await refreshReadiness()
+        } catch { setupMessage = "\(error)" }
     }
 
     func importModels(from directory: URL) async {
-        isPreparing = true; setupMessage = "Installing models…"
+        isPreparing = true; setupMessage = "Installing models…"; downloadProgress = nil
         defer { isPreparing = false }
         do {
             let ready = try await store.importLocalModels(from: directory)
             if Set(ready).isSuperset(of: ModelRegistry.all.map(\.name)) {
                 setupMessage = nil; await refreshReadiness()
             } else {
-                setupMessage = "Folder is missing some model files (need RealESRGAN4x.mlmodel, GFPGAN.mlmodel, FaceParsing.mlmodel)."
+                setupMessage = "Folder is missing some model files (need \(ModelRegistry.fileNamesList))."
             }
         } catch { setupMessage = "Couldn't install models: \(error)" }
     }

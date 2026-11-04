@@ -1,0 +1,137 @@
+name: Models
+
+# Builds the Core ML model files the app downloads and publishes them as a GitHub release.
+# The release tag, file names, sizes and SHA-256s all come from ModelRegistry.swift.
+# Only runs when model tooling, the registry, or this file changes (see `paths`).
+#
+# - Pull requests: always rebuild the models and check them against the pins, so a change to
+#   the tooling is proven to still produce exactly the bytes the app expects. If the release
+#   already exists, also check it still matches the pins. Nothing is published.
+# - main / manual: if the release exists, only check it against the pins (no rebuild).
+#   Otherwise build, check, publish, and check the published assets.
+# A model change that keeps the old tag fails the release check: published releases are
+# never modified. See tools/models/HOSTING.md and AGENTS.md.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "tools/models/**"
+      - "RestoreEngine/Sources/RestoreEngine/Models/ModelRegistry.swift"
+      - ".github/workflows/models.yml"
+  push:
+    branches: [main]
+    paths:
+      - "tools/models/**"
+      - "RestoreEngine/Sources/RestoreEngine/Models/ModelRegistry.swift"
+      - ".github/workflows/models.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# One run per PR (a new push cancels the stale run) or per branch. Runs on main are never
+# cancelled: one may be publishing.
+concurrency:
+  group: models-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  UV_PYTHON: "3.12"
+
+jobs:
+  models:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Read pins
+        id: pins
+        run: |
+          TAG=$(python3 tools/models/check_pins.py --tag)
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "files=$(python3 tools/models/check_pins.py --files)" >> "$GITHUB_OUTPUT"
+          # Only a 404 means "no release". Any other error must fail here, not look like one.
+          if gh api "repos/${{ github.repository }}/releases/tags/$TAG" --silent 2> api-error.txt; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Release $TAG exists."
+          elif grep -q "HTTP 404" api-error.txt; then
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "Release $TAG does not exist yet."
+          else
+            cat api-error.txt
+            echo "::error::Couldn't check whether release $TAG exists."
+            exit 1
+          fi
+
+      - name: Check published release against pins
+        if: steps.pins.outputs.exists == 'true'
+        # Uses the SHA-256 digests GitHub records for release assets: no download needed.
+        run: |
+          TAG="${{ steps.pins.outputs.tag }}"
+          if ! gh api "repos/${{ github.repository }}/releases/tags/$TAG" \
+                --jq '.assets[] | "\(.name) \(.size) \(.digest)"' \
+              | python3 tools/models/check_pins.py --assets; then
+            echo "::error::Release $TAG doesn't match ModelRegistry.swift. Published releases are never modified: to ship a changed model, point baseURL at a new tag (e.g. models-v3) and bump that model's version. See AGENTS.md."
+            exit 1
+          fi
+
+      - name: Cache original models
+        id: build
+        if: github.event_name == 'pull_request' || steps.pins.outputs.exists == 'false'
+        uses: actions/cache@v4
+        with:
+          path: |
+            tools/models/cache/RealESRGAN4x.mlmodel
+            tools/models/cache/GFPGAN.mlmodel
+            tools/models/cache/FaceParsing.mlmodel
+          key: models-src-${{ hashFiles('tools/models/manifest.json') }}
+
+      - name: Download original models
+        if: steps.build.outcome == 'success'
+        run: uv run --with-requirements tools/models/requirements.txt python -u tools/models/download.py --strict
+
+      - name: Build GFPGAN-ANE.mlmodel
+        if: steps.build.outcome == 'success'
+        # GitHub's macOS runners are VMs without a Neural Engine, so the script's PSNR gate runs on
+        # CPU/GPU here. Its fp16 probe of every intermediate value is what catches an overflow
+        # in CI; real Neural Engine output is only checked locally, by FaceRestorerIntegrationTests.
+        run: uv run --with-requirements tools/models/requirements.txt python -u tools/models/rewrite_gfpgan_ane.py
+
+      - name: Check built files against pins
+        if: steps.build.outcome == 'success'
+        run: |
+          if ! python3 tools/models/check_pins.py tools/models/cache; then
+            echo "::error::The built models don't match ModelRegistry.swift. If the change is intended, update the pins (and the release tag and version). See AGENTS.md."
+            exit 1
+          fi
+
+      - name: Publish release
+        if: github.event_name != 'pull_request' && steps.pins.outputs.exists == 'false'
+        run: |
+          TAG="${{ steps.pins.outputs.tag }}"
+          curl -fsSL https://raw.githubusercontent.com/TencentARC/GFPGAN/master/LICENSE \
+            -o tools/models/cache/GFPGAN-LICENSE.txt
+          cat > notes.md <<EOF
+          Core ML models for Photo Restore, downloaded by the app on first launch. Built by the
+          [Models workflow](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          from commit ${{ github.sha }}. This is not an app release.
+
+          \`GFPGAN-ANE.mlmodel\` is GFPGAN v1.4 rewritten by \`tools/models/rewrite_gfpgan_ane.py\` to
+          run on the Apple Neural Engine. The other two files are unmodified. Sources and licenses
+          are in \`MODEL_LICENSES.md\`.
+          EOF
+          FILES=()
+          for f in ${{ steps.pins.outputs.files }}; do FILES+=("tools/models/cache/$f"); done
+          gh release create "$TAG" --latest=false --title "Models (${TAG})" --notes-file notes.md \
+            "${FILES[@]}" tools/models/MODEL_LICENSES.md tools/models/cache/GFPGAN-LICENSE.txt
+
+      - name: Check published release
+        if: github.event_name != 'pull_request' && steps.pins.outputs.exists == 'false'
+        run: |
+          gh api "repos/${{ github.repository }}/releases/tags/${{ steps.pins.outputs.tag }}" \
+              --jq '.assets[] | "\(.name) \(.size) \(.digest)"' \
+            | python3 tools/models/check_pins.py --assets

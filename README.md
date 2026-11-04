@@ -56,12 +56,16 @@ cd RestoreEngine && swift test   # run the engine test suite
 
 ### Models
 
-The app downloads its ~460 MB of Core ML models on first launch from a hosting bucket
-(`ModelRegistry.baseURL` — wire to R2/S3, see `tools/models/HOSTING.md`). Until that's wired, or
-for offline use, the app's first-run screen offers **Install from Folder…** — point it at a folder
-containing `RealESRGAN4x.mlmodel`, `GFPGAN.mlmodel`, `FaceParsing.mlmodel` (e.g. produced by
-`tools/models/download.py`). Each download is SHA-256-verified, compiled to `.mlmodelc`, and cached
-in Application Support.
+On first launch the app offers to download its ~294 MB of Core ML models from this repo's
+[`models-v2` release](https://github.com/alecf/photo-restore-mac/releases/tag/models-v2)
+(`ModelRegistry.baseURL`; see `tools/models/HOSTING.md`). For offline use, **Install from Folder…**
+takes a folder containing `RealESRGAN4x.mlmodel`, `GFPGAN-ANE.mlmodel` and `FaceParsing.mlmodel`.
+Each file is SHA-256-verified, compiled to `.mlmodelc`, and cached in Application Support.
+
+`GFPGAN-ANE.mlmodel` is the upstream GFPGAN Core ML model rewritten by
+`tools/models/rewrite_gfpgan_ane.py` so it runs on the Neural Engine (~45 ms per face, about 20×
+faster than the GPU). The original build overflows 16-bit floats there and outputs a flat square.
+The `Models` GitHub Actions workflow builds and publishes these files; see `tools/models/HOSTING.md`.
 
 ## Distribution
 

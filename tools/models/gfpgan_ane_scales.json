@@ -1,0 +1,20 @@
+{
+  "_comment": "Per-layer demodulation scales k = 2^-n for rewrite_gfpgan_ane.py, pinned so the output bytes don't depend on calibration float noise. Regenerate with --calibrate; that changes the model's SHA-256 (see AGENTS.md).",
+  "log2_inverse_k": {
+    "out.29": 4,
+    "out.39": 2,
+    "out.47": 4,
+    "out.59": 1,
+    "out.67": 5,
+    "out.79": 2,
+    "out.87": 6,
+    "out.99": 2,
+    "out.107": 6,
+    "out.119": 2,
+    "out.127": 5,
+    "out.139": 2,
+    "out.147": 6,
+    "out.159": 2,
+    "out.167": 7
+  }
+}

@@ -1,5 +1,5 @@
 {
-  "_comment": "Pre-converted Core ML model artifacts adopted for v1 (U2). Sources are john-rocky/CoreML-Models (Google Drive). After download+validation, sha256 is recorded here and the files are re-hosted (U3) so the app never depends on Drive. drive_id is the Google Drive file id.",
+  "_comment": "Pre-converted Core ML model artifacts adopted for v1 (U2). Sources are john-rocky/CoreML-Models (Google Drive). After download+validation, sha256 is recorded here and the files are re-hosted on the models-v2 GitHub release so the app never depends on Drive. drive_id is the Google Drive file id. GFPGAN ships as GFPGAN-ANE.mlmodel, derived from this file by rewrite_gfpgan_ane.py.",
   "models": [
     {
       "name": "realesrgan-x4plus",

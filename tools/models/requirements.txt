@@ -1,0 +1,5 @@
+# Pinned so tools/models/rewrite_gfpgan_ane.py produces the same bytes everywhere (CI included).
+coremltools==9.0
+numpy==2.5.4
+pillow==13.0.0
+gdown==6.5.1

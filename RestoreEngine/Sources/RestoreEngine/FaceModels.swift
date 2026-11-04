@@ -9,10 +9,10 @@ public final class CoreMLFaceRestorer: @unchecked Sendable {
 
     public init(compiledModelURL: URL) throws {
         let config = MLModelConfiguration()
-        // Not `.all`: on the Neural Engine this GFPGAN build returns a near-uniform brown
-        // square instead of a face (seen on macOS 27.0.1). CPU and GPU give the real output.
+        // Needs the rewritten GFPGAN-ANE.mlmodel: the original build overflows fp16 on the
+        // Neural Engine and returns a flat brown square (see tools/models/rewrite_gfpgan_ane.py).
         // FaceRestorerIntegrationTests guards this.
-        config.computeUnits = .cpuAndGPU
+        config.computeUnits = .all
         self.model = try MLModel(contentsOf: compiledModelURL, configuration: config)
         let desc = model.modelDescription
         self.inputName = desc.inputDescriptionsByName["x_1"]?.name
