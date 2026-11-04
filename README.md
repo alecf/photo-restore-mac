@@ -20,15 +20,9 @@ the same models converted to Core ML.
 
 ## Screenshots
 
-| Queue a folder, adjust settings | Restore without face enhancement |
+| Queue a folder, adjust settings | Group photos too |
 | --- | --- |
-| ![Five photos queued in the filmstrip with the settings inspector open](site/screenshots/batch-settings.png) | ![Before/after of a 1925 family portrait restored with face restoration turned off](site/screenshots/restore-group-faces-off.png) |
-
-> **Known limitation: small faces.** Face restoration works well on faces that fill a good part of
-> the frame, like the portrait above. On small faces, such as a group photo with several people,
-> it currently produces flat, gray, featureless faces. For group shots, turn **Restore faces** off
-> in the settings panel (as in the right-hand screenshot): you still get the contrast fix and
-> upscaling. Always check the before/after slider.
+| ![Five photos queued in the filmstrip with the settings inspector open](site/screenshots/batch-settings.png) | ![Before/after of a 1925 family portrait of eight people, with every face restored](site/screenshots/restore-group.png) |
 
 Sample photos are public domain or have no known copyright restrictions, via Wikimedia Commons:
 Virginia Woolf (1927), the Yngve Larsson family (1925), Tor Bonnier's sons (Jan de Meyere), the
