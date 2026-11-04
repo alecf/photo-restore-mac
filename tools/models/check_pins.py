@@ -51,8 +51,11 @@ def main() -> int:
             p = d / fname
             if not p.exists():
                 return None
-            data = p.read_bytes()
-            return len(data), hashlib.sha256(data).hexdigest()
+            h = hashlib.sha256()
+            with p.open("rb") as fh:
+                for chunk in iter(lambda: fh.read(1 << 20), b""):
+                    h.update(chunk)
+            return p.stat().st_size, h.hexdigest()
     ok = True
     for name, fname, sha, size in specs:
         got_pair = lookup(fname)

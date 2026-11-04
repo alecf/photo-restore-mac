@@ -42,7 +42,8 @@ A published release is never modified. The workflow fails if a release's assets 
 pins, and the app rejects any file whose SHA-256 doesn't match.
 
 **Changes that need a model rebuild.** Anything that changes the bytes of a model file:
-- `tools/models/rewrite_gfpgan_ane.py`, its calibration images (`tools/models/calibration/`), or
+- `tools/models/rewrite_gfpgan_ane.py`, its pinned scale factors
+  (`tools/models/gfpgan_ane_scales.json`, regenerated with `--calibrate`), or
   `tools/models/requirements.txt`.
 - An upstream model in `tools/models/manifest.json`, or adding or removing a model.
 
@@ -55,6 +56,10 @@ For these, in the same PR:
    print the same values.
 4. Update the docs that state model names or sizes: README, `tools/models/HOSTING.md`,
    `MODEL_LICENSES.md`, and the landing page (see above).
+
+CI has no Neural Engine, so before merging a rewrite change, run `swift test --filter
+FaceRestorerIntegrationTests` in `RestoreEngine/` on Apple Silicon with the new model in
+`tools/models/cache/`.
 
 After merge, the Models run on `main` publishes the new release. Until it succeeds, new downloads
 get a 404, so don't start an app release before then.

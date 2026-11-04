@@ -65,8 +65,13 @@ Neural Engine and runs at ~45 ms per face (vs ~1 s on the GPU for the original).
 | CPU | 58.8 dB |
 
 Held-out inputs: whole photos and crops from five public-domain portraits, the test fixture, and
-synthetic black/white/gray/red/noise images. The largest intermediate value is ~1.2e3, 54× below
-the fp16 maximum. The script re-runs a shorter version of this check every time it builds.
+synthetic black/white/gray/red/noise images. The largest intermediate value (out of 506 checked) is
+~2.1e3, 31× below the fp16 maximum; the pure red image produces it, not a real face. The script
+re-runs a shorter version of this check every time it builds, with gates of 50 dB and 8× headroom.
+
+GitHub's macOS runners have no Neural Engine, so in CI the PSNR check runs on CPU/GPU and the fp16
+headroom check is the overflow guard. `FaceRestorerIntegrationTests` checks real Neural Engine output
+and needs the model files, so it runs locally, not in CI. Run it after any change to the rewrite.
 
 ```
 uv run --python 3.12 --with-requirements tools/models/requirements.txt \

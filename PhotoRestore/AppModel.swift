@@ -63,7 +63,10 @@ final class AppModel: ObservableObject {
 
     func refreshReadiness() async {
         modelsReady = await store.isReady()
-        if modelsReady { await buildEngineIfNeeded() }
+        if modelsReady {
+            await store.removeStaleModels()   // e.g. the previous version after a model update
+            await buildEngineIfNeeded()
+        }
     }
 
     /// Total model download size for display, e.g. "294 MB".
@@ -76,7 +79,12 @@ final class AppModel: ObservableObject {
         defer { isPreparing = false; downloadProgress = nil }
         do {
             try await store.ensureAll { fraction in
-                Task { @MainActor [weak self] in self?.downloadProgress = fraction }
+                // These hops can land out of order or after the download ends: only ever move
+                // forward, and leave a finished download's cleared progress alone.
+                Task { @MainActor [weak self] in
+                    guard let self, let current = self.downloadProgress, fraction > current else { return }
+                    self.downloadProgress = fraction
+                }
             }
             setupMessage = nil
             await refreshReadiness()
@@ -84,7 +92,7 @@ final class AppModel: ObservableObject {
     }
 
     func importModels(from directory: URL) async {
-        isPreparing = true; setupMessage = "Installing models…"
+        isPreparing = true; setupMessage = "Installing models…"; downloadProgress = nil
         defer { isPreparing = false }
         do {
             let ready = try await store.importLocalModels(from: directory)

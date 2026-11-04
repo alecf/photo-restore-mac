@@ -81,6 +81,62 @@ final class ModelStoreTests: XCTestCase {
         }
     }
 
+    /// A full-size file with the wrong contents (stale, from an older model with the same name)
+    /// must be thrown away and downloaded again, not reported as an integrity failure.
+    func testStaleFullSizeFileIsDownloadedAgain() async throws {
+        let root = try makeTempRoot()
+        let store = ModelStore(root: root)
+        let spec = ModelSpec(name: "t", fileName: "t.mlmodel", sha256: String(repeating: "0", count: 64),
+                             sizeBytes: 5, version: "1")
+        let raw = root.appendingPathComponent("raw", isDirectory: true)
+        try FileManager.default.createDirectory(at: raw, withIntermediateDirectories: true)
+        let file = raw.appendingPathComponent(spec.fileName)
+        try Data("stale".utf8).write(to: file)
+
+        let original = ModelRegistry.baseURL
+        defer { ModelRegistry.baseURL = original }
+        ModelRegistry.baseURL = URL(string: "https://unreachable.invalid/")!
+        do {
+            _ = try await store.compiledModel(for: spec)
+            XCTFail("expected the download to fail: the host doesn't resolve")
+        } catch ModelStore.ModelError.verificationFailed {
+            XCTFail("a stale file should trigger a new download, not an integrity error")
+        } catch {
+            // Reached the network, so the stale file was dropped and a download was attempted.
+            XCTAssertFalse(FileManager.default.fileExists(atPath: file.path))
+        }
+    }
+
+    func testRemoveStaleModelsKeepsOnlyCurrentVersions() async throws {
+        let root = try makeTempRoot()
+        let store = ModelStore(root: root)
+        let fm = FileManager.default
+        func makeDir(_ url: URL) throws { try fm.createDirectory(at: url, withIntermediateDirectories: true) }
+
+        let current = await store.compiledURL(for: ModelRegistry.gfpgan)
+        let compiled = root.appendingPathComponent("compiled", isDirectory: true)
+        let oldGFPGAN = compiled.appendingPathComponent("v1/\(ModelRegistry.gfpgan.name).mlmodelc", isDirectory: true)
+        let keptV1 = await store.compiledURL(for: ModelRegistry.realESRGAN)   // still version 1
+        let goneVersion = compiled.appendingPathComponent("v0/removed-model.mlmodelc", isDirectory: true)
+        for dir in [current, oldGFPGAN, keptV1, goneVersion] { try makeDir(dir) }
+
+        let raw = root.appendingPathComponent("raw", isDirectory: true)
+        try makeDir(raw)
+        let oldRaw = raw.appendingPathComponent("GFPGAN.mlmodel")
+        let partial = raw.appendingPathComponent(ModelRegistry.gfpgan.fileName)   // a resumable download
+        try Data("x".utf8).write(to: oldRaw)
+        try Data("x".utf8).write(to: partial)
+
+        await store.removeStaleModels()
+
+        XCTAssertTrue(fm.fileExists(atPath: current.path))
+        XCTAssertTrue(fm.fileExists(atPath: keptV1.path))
+        XCTAssertFalse(fm.fileExists(atPath: oldGFPGAN.path))
+        XCTAssertFalse(fm.fileExists(atPath: goneVersion.deletingLastPathComponent().path), "empty version folder")
+        XCTAssertFalse(fm.fileExists(atPath: oldRaw.path))
+        XCTAssertTrue(fm.fileExists(atPath: partial.path))
+    }
+
     func testVerifyFailsAndDeletesOnMismatch() async throws {
         let root = try makeTempRoot()
         let store = ModelStore(root: root)

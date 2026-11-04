@@ -109,6 +109,28 @@ public actor ModelStore {
         try fileManager.moveItem(at: compiled, to: target)
     }
 
+    /// Delete compiled models and raw downloads the registry no longer uses, such as the previous
+    /// version after a model update. Only touches this store's own `compiled/` and `raw/` folders.
+    public func removeStaleModels() {
+        let compiledRoot = modelsRoot.appendingPathComponent("compiled", isDirectory: true)
+        let current = Set(ModelRegistry.all.map { compiledURL(for: $0).standardizedFileURL.path })
+        for versionDir in contents(of: compiledRoot) {
+            for model in contents(of: versionDir) where !current.contains(model.standardizedFileURL.path) {
+                try? fileManager.removeItem(at: model)
+            }
+            if contents(of: versionDir).isEmpty { try? fileManager.removeItem(at: versionDir) }
+        }
+        let rawRoot = modelsRoot.appendingPathComponent("raw", isDirectory: true)
+        let currentRaw = Set(ModelRegistry.all.map(\.fileName))
+        for file in contents(of: rawRoot) where !currentRaw.contains(file.lastPathComponent) {
+            try? fileManager.removeItem(at: file)
+        }
+    }
+
+    private func contents(of directory: URL) -> [URL] {
+        (try? fileManager.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
+    }
+
     /// Ensure all registered models are present, reporting overall progress weighted by size.
     public func ensureAll(onProgress: (@Sendable (Double) -> Void)? = nil) async throws {
         let total = Double(ModelRegistry.totalBytes)
@@ -144,12 +166,17 @@ public actor ModelStore {
 
         // Resume: if a partial file exists, continue from its byte offset via a Range request.
         let existing = (try? fileManager.attributesOfItem(atPath: dest.path)[.size] as? Int) ?? nil
-        let resumeFrom = existing ?? 0
-        // Already fully downloaded (e.g. the app quit before verifying): a Range request past the
-        // end would get HTTP 416. Hand it to verify(), which deletes it if it's bad.
+        var resumeFrom = existing ?? 0
+        // A file at (or past) full size can't be resumed: a Range request past the end gets HTTP
+        // 416. Keep it if it's the finished download (the app quit before verifying); anything
+        // else is stale, so start over rather than failing the user's download.
         if resumeFrom >= spec.sizeBytes {
-            onProgress?(1.0)
-            return dest
+            if (try? verify(dest, spec: spec)) != nil {
+                onProgress?(1.0)
+                return dest
+            }
+            try? fileManager.removeItem(at: dest)
+            resumeFrom = 0
         }
         let remote = ModelRegistry.remoteURL(for: spec)
 

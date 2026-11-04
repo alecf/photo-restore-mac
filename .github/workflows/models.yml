@@ -54,12 +54,17 @@ jobs:
           TAG=$(python3 tools/models/check_pins.py --tag)
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "files=$(python3 tools/models/check_pins.py --files)" >> "$GITHUB_OUTPUT"
-          if gh release view "$TAG" >/dev/null 2>&1; then
+          # Only a 404 means "no release". Any other error must fail here, not look like one.
+          if gh api "repos/${{ github.repository }}/releases/tags/$TAG" --silent 2> api-error.txt; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
             echo "Release $TAG exists."
-          else
+          elif grep -q "HTTP 404" api-error.txt; then
             echo "exists=false" >> "$GITHUB_OUTPUT"
             echo "Release $TAG does not exist yet."
+          else
+            cat api-error.txt
+            echo "::error::Couldn't check whether release $TAG exists."
+            exit 1
           fi
 
       - name: Check published release against pins
@@ -91,8 +96,9 @@ jobs:
 
       - name: Build GFPGAN-ANE.mlmodel
         if: steps.build.outcome == 'success'
-        # Verifies the rewrite against the original on the CPU. (GitHub's macOS runners are
-        # VMs without a Neural Engine, so `.all` runs on CPU/GPU here; the 54+ dB gate holds there too.)
+        # GitHub's macOS runners are VMs without a Neural Engine, so the script's PSNR gate runs on
+        # CPU/GPU here. Its fp16 probe of every intermediate value is what catches an overflow
+        # in CI; real Neural Engine output is only checked locally, by FaceRestorerIntegrationTests.
         run: uv run --with-requirements tools/models/requirements.txt python tools/models/rewrite_gfpgan_ane.py
 
       - name: Check built files against pins

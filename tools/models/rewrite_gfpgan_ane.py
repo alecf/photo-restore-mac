@@ -16,19 +16,25 @@ constant weights:
        y = conv(x * s, W) * demod,     demod = rsqrt( W2 @ s^2 + eps ),   W2[o,i] = sum_k W[o,i]^2
 with power-of-two factors that cancel exactly but keep every intermediate value in fp16 range:
        y = conv(x * (c*s), W * k/c) * rsqrt( k^2 * (W2 @ s^2) + k^2 * eps )
-k is chosen per layer from calibration faces (tools/models/calibration/) so the scaled sum stays
-near TARGET; c is a fixed 1/8 that keeps x*s small.
+k is a power of two per layer, pinned in gfpgan_ane_scales.json so the output bytes can't drift
+between machines. `--calibrate` recomputes it from the calibration faces
+(tools/models/calibration/) so the scaled sum stays near TARGET, and rewrites that file.
+c is a fixed 1/8 that keeps x*s small.
 
-Result: every layer is placed on the Neural Engine, ~20x faster than the GPU path, and the
-output matches the original model on CPU at >50 dB PSNR. Weights are stored as fp16 (half the
-download; the Neural Engine computes in fp16 anyway), which costs no measurable accuracy.
+Result: every layer is placed on the Neural Engine, ~20x faster than the GPU path. Weights are
+stored as fp16 (half the download; the Neural Engine computes in fp16 anyway). The output matches
+the original model on CPU at 54.8 dB PSNR or better on every compute unit; the gate is MIN_PSNR_DB.
 
 Run (needs the original model, from download.py):
     uv run --python 3.12 --with-requirements tools/models/requirements.txt \
         python tools/models/rewrite_gfpgan_ane.py
 
-Writes tools/models/cache/GFPGAN-ANE.mlmodel, then verifies it on the Neural Engine against
-the original on the CPU. The output is deterministic: the same input gives the same bytes.
+Writes tools/models/cache/GFPGAN-ANE.mlmodel, then verifies it against the original on the CPU:
+PSNR on the default compute units, plus an fp32 probe that every intermediate value stays far
+below the fp16 maximum. On a machine without a Neural Engine (e.g. GitHub's macOS VMs) the PSNR
+check runs on CPU/GPU, so the fp16 probe is what guards against Neural Engine overflow there;
+RestoreEngine's FaceRestorerIntegrationTests checks real Neural Engine output.
+The output is deterministic: the same input gives the same bytes.
 """
 from __future__ import annotations
 
@@ -49,12 +55,14 @@ from PIL import Image
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
 CALIBRATION = sorted(glob.glob(str(HERE / "calibration" / "*.jpg")))
+SCALES = HERE / "gfpgan_ane_scales.json"
 FIXTURE = REPO / "RestoreEngine/Tests/RestoreEngineTests/Fixtures/input_sample.jpg"
 
 TARGET = 256.0     # aim for scaled demod sums near this (fp16 max is 65504)
 C = 1.0 / 8        # scale on x*s; undone in the conv weights
 FP16_MAX = 65504.0
-MIN_PSNR_DB = 45.0
+MIN_PSNR_DB = 50.0
+FP16_HEADROOM = 8  # every intermediate must stay below FP16_MAX / this
 
 
 def load_rgb(path) -> Image.Image:
@@ -89,10 +97,13 @@ def new_layer(name, kind, inputs):
     return layer
 
 
-def rewrite(spec):
+def rewrite(spec, scales=None):
+    """Rewrite the runtime-weight convs. `scales` maps conv layer name -> log2(1/k); when it's
+    None, k is calibrated. Returns the spec and the scales used."""
     layers = list(spec.neuralNetwork.layers)
     by_out = {l.output[0]: l for l in layers}
-    sum_max = calibrate(spec, layers)
+    sum_max = calibrate(spec, layers) if scales is None else None
+    scales_used = {}
 
     def const(name):
         l = by_out[name]
@@ -116,12 +127,22 @@ def rewrite(spec):
         else:
             # to-RGB conv: flat = W * s, no demodulation.
             modulate, demod_sum = flat, None
+        # The rewritten conv gets no bias: check the source conv didn't have one either.
+        assert not l.convolution.hasBias, f"{l.name}: modulated conv with a bias is not supported"
         W = const(modulate.input[0])[0]                   # (O, I, kh, kw)
         style = by_out[modulate.input[1]].input[0]        # (1, I) style vector
         O, I = W.shape[:2]
         k = 1.0
         if demod_sum:
-            k = 2.0 ** -max(0, math.ceil(math.log2(math.sqrt(sum_max[demod_sum] / TARGET))))
+            if scales is None:
+                exp = max(0, math.ceil(math.log2(math.sqrt(sum_max[demod_sum] / TARGET))))
+            elif l.name in scales:
+                exp = scales[l.name]
+            else:
+                raise SystemExit(f"{l.name} has no pinned scale in {SCALES.name}: run with --calibrate")
+            scales_used[l.name] = exp
+            k = 2.0 ** -exp
+            eps_alpha = add_eps.add.alpha                 # the source model's demod epsilon
 
         p = l.name
         scaled = new_layer(p + "_sc", "multiply", [style])
@@ -149,7 +170,7 @@ def rewrite(spec):
             dsum.innerProduct.hasBias = False
             dsum.innerProduct.weights.floatValue.extend((W.astype(np.float64) ** 2).sum(axis=(2, 3)).astype(np.float32).ravel().tolist())
             eps = new_layer(p + "_eps", "add", [p + "_dsum"])
-            eps.add.alpha = 1e-8 * k * k
+            eps.add.alpha = eps_alpha * k * k
             rs = new_layer(p + "_d", "unary", [p + "_eps"])
             rs.unary.type = nnp.UnaryFunctionLayerParams.RSQRT
             rs.unary.alpha = 1.0
@@ -158,7 +179,8 @@ def rewrite(spec):
             mul = nnp.NeuralNetworkLayer(name=p + "_demod", input=[p + "_raw", p + "_d4"], output=[final])
             mul.multiplyBroadcastable.SetInParent()
             out_layers += [sq, dsum, eps, rs, d4, mul]
-            print(f"  {p:22s} {O:3d}x{I:3d}x{W.shape[2]}x{W.shape[3]}  demod sum max {sum_max[demod_sum]:9.3g}  k=1/{int(1 / k)}")
+            seen = f"demod sum max {sum_max[demod_sum]:9.3g}" if sum_max else "pinned"
+            print(f"  {p:22s} {O:3d}x{I:3d}x{W.shape[2]}x{W.shape[3]}  {seen}  k=1/{int(1 / k)}")
         else:
             print(f"  {p:22s} {O:3d}x{I:3d}x{W.shape[2]}x{W.shape[3]}  to-RGB")
 
@@ -177,7 +199,9 @@ def rewrite(spec):
         " by photo-restore-mac tools/models/rewrite_gfpgan_ane.py."
     )
     print(f"rewrote convs: {len(layers)} -> {len(out_layers)} layers")
-    return spec
+    if scales is not None and set(scales) != set(scales_used):
+        raise SystemExit(f"{SCALES.name} has scales for layers not in this model: {sorted(set(scales) - set(scales_used))}")
+    return spec, scales_used
 
 
 def verification_inputs():
@@ -201,7 +225,11 @@ def verify(src_path, out_path):
     ref = ct.models.MLModel(str(src_path), compute_units=ct.ComputeUnit.CPU_ONLY)
     ane = ct.models.MLModel(str(out_path), compute_units=ct.ComputeUnit.ALL)
     spec = ane.get_spec()
-    watched = [l.output[0] for l in spec.neuralNetwork.layers if l.output[0].endswith(("_raw", "_eps", "_xs"))]
+    # Every computed value. Constants are skipped, and so are the "*_without_bias" conv outputs,
+    # which Core ML won't expose as model outputs; their "+ bias" layer right after is watched.
+    watched = [l.output[0] for l in spec.neuralNetwork.layers
+               if l.WhichOneof("layer") != "loadConstantND"
+               and l.output[0] != "activation_out" and not l.output[0].endswith("_without_bias")]
     probe = ct.models.MLModel(with_outputs(spec, watched), compute_units=ct.ComputeUnit.CPU_ONLY)
 
     worst_psnr, peak = math.inf, 0.0
@@ -214,9 +242,9 @@ def verify(src_path, out_path):
         r = probe.predict({"x_1": img})
         peak = max(peak, max(float(np.abs(np.asarray(r[n])).max()) for n in watched))
         print(f"  {name:20s} PSNR vs original-on-CPU {psnr:5.1f} dB")
-    print(f"worst PSNR {worst_psnr:.1f} dB (gate {MIN_PSNR_DB}); largest intermediate {peak:.4g} "
-          f"= fp16 headroom x{FP16_MAX / peak:.0f}")
-    return worst_psnr >= MIN_PSNR_DB and peak < FP16_MAX / 8
+    print(f"worst PSNR {worst_psnr:.1f} dB (gate {MIN_PSNR_DB}); largest of {len(watched)} intermediates "
+          f"{peak:.4g} = fp16 headroom x{FP16_MAX / peak:.0f} (gate x{FP16_HEADROOM})")
+    return worst_psnr >= MIN_PSNR_DB and peak < FP16_MAX / FP16_HEADROOM
 
 
 def main() -> int:
@@ -225,12 +253,24 @@ def main() -> int:
     ap.add_argument("--out", default=str(HERE / "cache" / "GFPGAN-ANE.mlmodel"))
     ap.add_argument("--fp32", action="store_true", help="keep fp32 weights (twice the file size)")
     ap.add_argument("--no-verify", action="store_true")
+    ap.add_argument("--calibrate", action="store_true",
+                    help=f"recompute the per-layer scales from the calibration faces and rewrite {SCALES.name}")
     args = ap.parse_args()
     if not CALIBRATION:
         print("no calibration images in tools/models/calibration/", file=sys.stderr)
         return 1
 
-    spec = rewrite(ct.utils.load_spec(args.src))
+    import json
+    scales = None if args.calibrate else json.loads(SCALES.read_text())["log2_inverse_k"]
+    spec, used = rewrite(ct.utils.load_spec(args.src), scales)
+    if args.calibrate:
+        SCALES.write_text(json.dumps({
+            "_comment": "Per-layer demodulation scales k = 2^-n for rewrite_gfpgan_ane.py, pinned so the "
+                        "output bytes don't depend on calibration float noise. Regenerate with --calibrate; "
+                        "that changes the model's SHA-256 (see AGENTS.md).",
+            "log2_inverse_k": used,
+        }, indent=2) + "\n")
+        print(f"wrote {SCALES}")
     if not args.fp32:
         import contextlib, io
         from coremltools.models.neural_network import quantization_utils
