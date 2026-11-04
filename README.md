@@ -8,6 +8,8 @@ Core ML) — no cloud, no accounts, no data leaves your Mac.
 It's a native Swift reimplementation of the [`photo-restore`](../photo-restore) Python CLI, using
 the same models converted to Core ML.
 
+![Photo Restore showing a before/after comparison of a 1927 portrait](site/screenshots/restore-portrait.png)
+
 ## What it does
 
 - **Auto-contrast** faded scans (luminance-preserving — never shifts color, never colorizes).
@@ -15,6 +17,23 @@ the same models converted to Core ML.
 - **Restore faces** with GFPGAN, aligned via Apple Vision, composited back with a parsing mask so
   only the face is touched. Color-match (B&W stays gray), texture-preserving blend, matched grain.
 - **Batch** 100+ images with live progress, a filmstrip of every image, and a before/after slider.
+
+## Screenshots
+
+| Queue a folder, adjust settings | Restore without face enhancement |
+| --- | --- |
+| ![Five photos queued in the filmstrip with the settings inspector open](site/screenshots/batch-settings.png) | ![Before/after of a 1925 family portrait restored with face restoration turned off](site/screenshots/restore-group-faces-off.png) |
+
+> **Known limitation: small faces.** Face restoration works well on faces that fill a good part of
+> the frame, like the portrait above. On small faces, such as a group photo with several people,
+> it currently produces flat, gray, featureless faces. For group shots, turn **Restore faces** off
+> in the settings panel (as in the right-hand screenshot): you still get the contrast fix and
+> upscaling. Always check the before/after slider.
+
+Sample photos are public domain or have no known copyright restrictions, via Wikimedia Commons:
+Virginia Woolf (1927), the Yngve Larsson family (1925), Tor Bonnier's sons (Jan de Meyere), the
+Lipschultz family (Jewish Historical Society of the Upper Midwest), and Mary Sargant Florence and
+family.
 
 ## Architecture
 
