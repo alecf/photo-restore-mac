@@ -6,7 +6,7 @@ import argparse
 import re
 from email.utils import formatdate
 
-MIN_SYSTEM = "14.0"
+MIN_SYSTEM = "26.0"
 
 
 def signature_attrs(fragment: str) -> str:
