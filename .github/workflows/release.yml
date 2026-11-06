@@ -39,7 +39,7 @@ jobs:
           echo "VERSION=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "TAG=v${VERSION}" >> "$GITHUB_OUTPUT"
           echo "Releasing ${VERSION}"
-          CHANGELOG=$(git-cliff --latest --strip header 2>/dev/null)
+          CHANGELOG=$(git-cliff --unreleased --strip header 2>/dev/null)
           EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
           { echo "CHANGELOG<<${EOF}"; echo "${CHANGELOG}"; echo "${EOF}"; } >> "$GITHUB_OUTPUT"
 
