@@ -3,7 +3,7 @@ name: PhotoRestore
 options:
   bundleIdPrefix: com.alecf
   deploymentTarget:
-    macOS: "14.0"
+    macOS: "26.0"
   createIntermediateGroups: true
 
 packages:
@@ -27,7 +27,7 @@ targets:
       properties:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
-        LSMinimumSystemVersion: "14.0"
+        LSMinimumSystemVersion: "26.0"
         LSApplicationCategoryType: public.app-category.photography
         NSHumanReadableCopyright: "MIT-licensed. © 2026 Alec Flett."
         NSHighResolutionCapable: true
